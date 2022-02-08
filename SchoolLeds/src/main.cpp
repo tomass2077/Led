@@ -27,7 +27,7 @@ DynamicJsonDocument doc(512);
 String IP = "@@@@";
 ESP8266WebServer server(80);
 uint8_t program = 1;
-uint8_t ID = 255;
+uint8_t ID = 24;
 String getValue(String data, char separator, int index)
 {
 	int found = 0;
@@ -105,9 +105,9 @@ struct Cola
 };
 Cola Interpolate(int r, int g, int b, int rOld, int gOld, int bOld, float t)
 {
-	int R = int(r + ((rOld - r) * t));
-	int G = int(g + ((gOld - g) * t));
-	int B = int(b + ((bOld - b) * t));
+	int R = int(rOld + ((r - rOld) * t));
+	int G = int(gOld + ((g - gOld) * t));
+	int B = int(bOld + ((b - bOld) * t));
 	Cola what;
 	what.r = R;
 	what.g = G;
@@ -138,7 +138,7 @@ void CheckInputs()
 		{
 			op.replace("id", "");
 			WriteID(op.toInt());
-			ID = GetID();
+			ID = op.toInt();
 			Serial.print("ID set to:" + op);
 		}
 	}
@@ -148,6 +148,8 @@ int blynkMilis = 100;
 bool blinky = false;
 void setup()
 {
+	EEPROM.begin(512);
+	Serial.begin(115200);
 	//Led strip setup
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalLEDStrip);
@@ -254,6 +256,8 @@ int OldColB = 0;
 int NewColR = 0;
 int NewColG = 0;
 int NewColB = 0;
+int OldFrame = 0;
+int NewFrame = 0;
 long lastMilis = 0;
 void loop()
 {
@@ -267,10 +271,12 @@ void loop()
 		{
 			packet[len] = '\0';
 		}
-
+			
+			NewFrame = packet[3];
 		//int Frame = packet[1] + (255 * packet[2]);
-		if (NewColR != packet[0])
+		if (OldFrame != NewFrame)
 		{
+			OldFrame = NewFrame;
 			OldColR = NewColR;
 			OldColG = NewColG;
 			OldColB = NewColB;
@@ -278,16 +284,18 @@ void loop()
 			NewColG = packet[1];
 			NewColB = packet[2];
 			lastMilis = millis();
+			//Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
 		}
-		Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB));
+		
 	}
 	float a = float(millis() - lastMilis) / 80;
 	if (a > 1)
 		a = 1;
 	if (a < 0)
 		a = 0;
-	Cola color = Interpolate(NewColR, NewColG, NewColB, OldColR, OldColG, OldColB, 1-a);
+	Cola color = Interpolate(NewColR, NewColG, NewColB, OldColR, OldColG, OldColB, a);
 	FastLED.showColor(CRGB(color.r, color.g, color.b));
+	Serial.println(String(color.r) + " " + String(color.g) + " " + String(color.b)+" " + String(NewFrame)+" " + String(OldFrame));
 	delay(1);
 }
 

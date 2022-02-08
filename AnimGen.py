@@ -2,7 +2,6 @@ from time import sleep
 import cv2
 import numpy as np
 import os
-
 def Convertion(Nam):
     #Nam = 'RGBW.mp4'
     cap = cv2.VideoCapture(Nam)
@@ -28,28 +27,38 @@ def Convertion(Nam):
     for f in range(frameCount):
         sleep(0.04)
         print("\n");
+        i = 0;
+        
+        for x in range(9):
+             #print("");
+             for y in range(3):
+                 file.write(chr(int(  buf[f][5+y*10][5+x*10][2]/2  )))
+                 file.write(chr(int(  buf[f][5+y*10][5+x*10][1]/2  )))
+                 file.write(chr(int(  buf[f][5+y*10][5+x*10][0]/2  )))
+                 file.write(chr(2))
+                 file.write(chr(3))
+                 #print(str(i)+" ", end = '')
+                # i=i+1
+        
         for y in range(3):
             print("");
             for x in range(9):
-              file.write(chr(int(  buf[f][5+y*10][5+x*10][2]/2  )))
-              file.write(chr(int(  buf[f][5+y*10][5+x*10][1]/2  )))
-              file.write(chr(int(  buf[f][5+y*10][5+x*10][0]/2  )))
-              file.write(chr(2))
-              file.write(chr(3))
-              c = ""
-              v = buf[f][5+y*10][5+x*10][2]
-              if(v < 255/5*1):
-                  c="."
-              elif(v < 255/5*2):
-                  c="-"
-              elif(v < 255/5*3):
-                  c="+"
-              elif(v < 255/5*4):
-                      c="#"
-              else:
-                  c="@"
-    
-              print(c+" ", end = '')
+                 c = ""
+                 v = buf[f][5+y*10][5+x*10][2]
+                 if(v < 255/5*1):
+                     c="."
+                 elif(v < 255/5*2):
+                     c="-"
+                 elif(v < 255/5*3):
+                     c="+"
+                 elif(v < 255/5*4):
+                         c="#"
+                 else:
+                     c="@"
+                 print(c+" ", end = '')
+                 i=i+1
+                 #print(i, end = '')
+                 
 
     print("\n");
     file.close()

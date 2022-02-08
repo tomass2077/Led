@@ -30,7 +30,8 @@ String pass = "";
 const size_t capacit = 512 * 8;
 DynamicJsonDocument doc(capacit);
 File SdCard;
-void Blank(){
+void Blank()
+{
 	for (int i = 0; i < 27; i++)
 	{
 		IPAddress pps;
@@ -82,6 +83,7 @@ void setup()
 			http.setTimeout(300);
 			http.begin(client, serverPath.c_str());
 			int httpCode = http.GET();
+			doc["devices"][i]["found"] = false;
 			if (http.getString() != "")
 				doc["devices"][i]["found"] = true;
 			else
@@ -128,7 +130,7 @@ void setup()
 			}
 			u8g2.sendBuffer();
 		}
-		Blank();
+	Blank();
 	SdCard.close();
 	server.on("/espinator/MyData", HandleMyData);
 	server.begin();
@@ -210,7 +212,7 @@ void ConnectedOnes()
 				u8g2.setCursor(5 + offset * 3, 15 + 9 * (i - 18));
 			else if (i < 27)
 				u8g2.setCursor(5 + offset * 4, 15 + 9 * (i - 21));
-			if (doc["devices"][i]["found"])
+			if (bool(doc["devices"][i]["found"]))
 			{
 				if (i < 10)
 					u8g2.print(".0" + (String)i + ".");
@@ -278,17 +280,20 @@ void Blinky(String name)
 		for (int f = 0; f < frames; f++)
 		{
 			u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
-			for (int x = 0; x < 3; x++)
-				for (int y = 0; y < 9; y++)
+			for (int y = 0; y < 9; y++)
+				for (int x = 0; x < 3; x++)
 				{
-					int led = x * 9 + y;
+					int led = y * 3 + x;
 					u8g2.setCursor(y * 13 + 10, x * 13 + 20);
 					int fuR = pp[f * 27 * sizeof(color) + led * sizeof(color) + 0] * 2;
 					int fuG = pp[f * 27 * sizeof(color) + led * sizeof(color) + 1] * 2;
 					int fuB = pp[f * 27 * sizeof(color) + led * sizeof(color) + 2] * 2;
 					int coli = (fuR + fuG + fuB) / 3;
 					char myASCII[] = " .:-=+*#%@";
-					u8g2.print(myASCII[int(float(coli) / 256 * (sizeof(myASCII) / sizeof(*myASCII)))]);
+					char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
+					if (coli > 230)
+						ap = '@';
+					u8g2.print(ap);
 				}
 			u8g2.sendBuffer();
 			handleInput();
@@ -311,7 +316,7 @@ void Blinky(String name)
 			{
 				IPAddress pps;
 				pps.fromString(doc["devices"][i]["IP"].as<String>());
-
+				if(doc["devices"][i]["found"])
 				for (int j = 0; j < 16; j++)
 				{
 					UDP.beginPacket(pps, UDP_PORT);
@@ -320,7 +325,7 @@ void Blinky(String name)
 					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
 					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
 					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
-					UDP.write(frame);
+					UDP.write(f);
 					UDP.write(frame2);
 					UDP.endPacket();
 				}
@@ -480,18 +485,18 @@ void HandleMyData()
 	{
 		SdCard = SD.open("modules.json", 2);
 		Serial.println(atoi(server.arg("ID").c_str()));
-		for (int i = 0; i < doc["devices"].size(); i++)
-		{
-			if (int(doc["devices"][i]["id"]) == atoi(server.arg("ID").c_str()))
-			{
+		//for (int i = 0; i < doc["devices"].size(); i++)
+		//{
+			//if (int(doc["devices"][i]["id"]) == server.arg("ID").c_str())
+			//{
 				server.send(200, "application/json", "{\"found\":true\"}");
 
-				doc["devices"][i]["IP"] = server.arg("IP");
-				doc["devices"][i]["Mac"] = server.arg("Mac");
-				doc["devices"][i]["found"] = true;
-				break;
-			}
-		}
+				doc["devices"][atoi(server.arg("ID").c_str())]["IP"] = server.arg("IP");
+				doc["devices"][atoi(server.arg("ID").c_str())]["Mac"] = server.arg("Mac");
+				doc["devices"][atoi(server.arg("ID").c_str())]["found"] = true;
+				//break;
+			//}
+		//}
 		Serial.println(doc.as<String>());
 		server.send(200, "application/json", "{ \"found\":false}");
 		serializeJson(doc, SdCard);

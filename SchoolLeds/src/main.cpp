@@ -76,10 +76,10 @@ String GetIP()
 	int addr = 1;
 
 	String string;
-	uint8_t num1=0;
-	uint8_t num2=0;
-	uint8_t num3=0;
-	uint8_t num4=0;
+	uint8_t num1 = 0;
+	uint8_t num2 = 0;
+	uint8_t num3 = 0;
+	uint8_t num4 = 0;
 
 	num1 = EEPROM.get(addr, num1);
 	addr++;
@@ -99,33 +99,49 @@ void WriteID(uint8_t ip)
 
 	EEPROM.commit();
 }
+struct Cola
+{
+	int r, g, b;
+};
+Cola Interpolate(int r, int g, int b, int rOld, int gOld, int bOld, float t)
+{
+	int R = int(r + ((rOld - r) * t));
+	int G = int(g + ((gOld - g) * t));
+	int B = int(b + ((bOld - b) * t));
+	Cola what;
+	what.r = R;
+	what.g = G;
+	what.b = B;
+	return (what);
+}
 //gets ID saved
 uint8_t GetID()
 {
-	uint8_t num1=0;
+	uint8_t num1 = 0;
 
 	num1 = EEPROM.get(0, num1);
 	return (num1);
 }
-void CheckInputs(){
+void CheckInputs()
+{
 	String op = Serial.readString();
-		if (op[0] == 'i')
+	if (op[0] == 'i')
+	{
+		if (op[1] == 'p')
 		{
-			if (op[1] == 'p')
-			{
-				op.replace("ip", "");
-				WriteIP(op);
-				IP = GetIP();
-				Serial.print("Ip set to:" + op);
-			}
-			if (op[1] == 'd')
-			{
-				op.replace("id", "");
-				WriteID(op.toInt());
-				ID = GetID();
-				Serial.print("ID set to:" + op);
-			}
+			op.replace("ip", "");
+			WriteIP(op);
+			IP = GetIP();
+			Serial.print("Ip set to:" + op);
 		}
+		if (op[1] == 'd')
+		{
+			op.replace("id", "");
+			WriteID(op.toInt());
+			ID = GetID();
+			Serial.print("ID set to:" + op);
+		}
+	}
 }
 int blynk = 100;
 int blynkMilis = 100;
@@ -137,16 +153,17 @@ void setup()
 	FastLED.setCorrection(TypicalLEDStrip);
 	ID = GetID();
 	//Just blinkeys
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 3; i++)
 	{
-		
+
 		leds[0] = CRGB::White;
 		FastLED.show();
 		CheckInputs();
-		delay(20);
+		delay(100);
 		leds[0] = CRGB::Black;
 		FastLED.show();
-		delay(500);
+		CheckInputs();
+		delay(100);
 	}
 
 	FastLED.clear();
@@ -170,6 +187,7 @@ void setup()
 	Serial.println("Got main IP: " + IP);
 	Serial.println("Got Mac: " + WiFi.macAddress());
 	Serial.println("Got IP: " + WiFi.localIP().toString());
+	Serial.println("Got ID: " + ID);
 	//Server propeties
 	server.on("/espinator/SetCol", HandleCol);
 	server.on("/espinator/UThere", UThere);
@@ -178,7 +196,7 @@ void setup()
 	// Get id and send ip from Mac
 	WiFiClient client;
 	HTTPClient http;
-	String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress()+"&ID=" + ID + "&IP=" + WiFi.localIP().toString();
+	String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
 	http.setTimeout(200);
 	http.begin(client, serverPath.c_str());
 	int httpCode = http.GET();
@@ -230,6 +248,13 @@ void setup()
 }
 uint8_t packet[32];
 //int col = 0;
+int OldColR = 0;
+int OldColG = 0;
+int OldColB = 0;
+int NewColR = 0;
+int NewColG = 0;
+int NewColB = 0;
+long lastMilis = 0;
 void loop()
 {
 	server.handleClient();
@@ -244,12 +269,25 @@ void loop()
 		}
 
 		//int Frame = packet[1] + (255 * packet[2]);
-		int NewColR = packet[0];
-		int NewColG = packet[1];
-		int NewColB = packet[2];
-		FastLED.showColor(CRGB(NewColR, NewColG, NewColB));
-		Serial.println(String(NewColR)+" "+String(NewColG)+" "+String(NewColB));
+		if (NewColR != packet[0])
+		{
+			OldColR = NewColR;
+			OldColG = NewColG;
+			OldColB = NewColB;
+			NewColR = packet[0];
+			NewColG = packet[1];
+			NewColB = packet[2];
+			lastMilis = millis();
+		}
+		Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB));
 	}
+	float a = float(millis() - lastMilis) / 80;
+	if (a > 1)
+		a = 1;
+	if (a < 0)
+		a = 0;
+	Cola color = Interpolate(NewColR, NewColG, NewColB, OldColR, OldColG, OldColB, 1-a);
+	FastLED.showColor(CRGB(color.r, color.g, color.b));
 	delay(1);
 }
 

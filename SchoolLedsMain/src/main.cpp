@@ -1,10 +1,4 @@
 #include <Arduino.h>
-
-/*
- Name:		SchoolLedMain.ino
- Created:	1/14/2022 12:20:31 PM
- Author:	Tomass
-*/
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -19,6 +13,13 @@
 #include <WiFiUdp.h>
 #include <stdio.h>
 #include <cstring>
+#include <SolarPosition.h>
+#include <NTPClient.h>
+//#include "LoadingBar.h"
+float timeZone = 2;
+float MaxSunAngle = 2;
+struct tm startTime;
+struct tm endTime;
 #define UDP_PORT 4210
 WiFiUDP UDP;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
@@ -26,10 +27,31 @@ void HandleMyData();
 ESP8266WebServer server(80);
 String ssid = "";
 String pass = "";
-
-const size_t capacit = 512 * 8;
-DynamicJsonDocument doc(capacit);
+const size_t capacity = 512 * 8;
+DynamicJsonDocument doc(capacity);
 File SdCard;
+
+SolarPosition RigaSun(56, 24);
+
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+String getValue(String data, char separator, int index)
+{
+	int found = 0;
+	int strIndex[] = {0, -1};
+	int maxIndex = data.length() - 1;
+
+	for (int i = 0; i <= maxIndex && found <= index; i++)
+	{
+		if (data.charAt(i) == separator || i == maxIndex)
+		{
+			found++;
+			strIndex[0] = strIndex[1] + 1;
+			strIndex[1] = (i == maxIndex) ? i + 1 : i;
+		}
+	}
+	return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+}
 void Blank()
 {
 	for (int i = 0; i < 27; i++)
@@ -41,7 +63,7 @@ void Blank()
 		{
 			UDP.beginPacket(pps, UDP_PORT);
 
-			//for (int jj = 0; jj < 16; jj++)
+			// for (int jj = 0; jj < 16; jj++)
 			UDP.write(uint8_t(0));
 			UDP.write(uint8_t(0));
 			UDP.write(uint8_t(0));
@@ -51,29 +73,164 @@ void Blank()
 		}
 	}
 }
+
+String loads[5];
+void loadingBarClear()
+{
+	for (int i = 0; i < 5; i++)
+		loads[i] = "";
+}
+void loadingBar(int filled, String txt, bool scroll)
+{
+	int with = 100;
+	int height = 10;
+	u8g2.clearBuffer();
+	u8g2.drawFrame(128 / 2 - with / 2, 64 - height, with, height);
+	u8g2.drawBox(128 / 2 - with / 2, 64 - height, filled, height);
+	u8g2.setFont(u8g2_font_6x13_tr);
+	if (scroll)
+	{
+		loads[4] = loads[3];
+		loads[3] = loads[2];
+		loads[2] = loads[1];
+		loads[1] = loads[0];
+		loads[0] = txt;
+	}
+
+	for (int i = 0; i < 5; i++)
+	{
+		u8g2.setCursor(1, 11 * (i + 1) - 5);
+		u8g2.print(loads[4 - i]);
+	}
+	u8g2.sendBuffer();
+}
+
+int GetFounds()
+{
+	int found = 0;
+	for (int i = 0; i < 27; i++)
+		if (doc["devices"][i]["found"] == true)
+			found++;
+	return (found);
+}
+bool CheckTime = true;
+bool CheckSunAngle = true;
 void setup()
 {
-	u8g2.begin();
+
+	startTime.tm_hour = 7;
+	startTime.tm_min = 30;
+	endTime.tm_hour = 17;
+	endTime.tm_min = 0;
+
 	Serial.begin(115200);
+	u8g2.begin();
+	u8g2.setFlipMode(1);
+	loadingBar(5, "Starting SD card", true);
+	Serial.print("sd begin:");
+	if (!SD.begin(D8))
+	{
+		loadingBar(0, "SD failed", true);
+		delay(5000);
+		ESP.restart();
+	}
+	else
+		loadingBar(10, "SD initialized", true);
+
+
+
+
+
+	SdCard = SD.open("config.json", FILE_READ);
+	if (SdCard.available())
+		loadingBar(20, "Got config", true);
+	else
+	{
+		loadingBar(0, "Mising config.json", true);
+		delay(5000);
+		ESP.restart();
+	}
+	DynamicJsonDocument config(512);
+	deserializeJson(config, SdCard.readString());
+	timeZone = config["TimeZone"];
+	startTime.tm_hour = getValue(config["StopInMorning"], ':', 0).toInt();
+	startTime.tm_min = getValue(config["StopInMorning"], ':', 1).toInt();
+	endTime.tm_hour = getValue(config["StartInEvening"], ':', 0).toInt();
+	endTime.tm_min = getValue(config["StartInEvening"], ':', 1).toInt();
+	CheckTime = config["CheckTime"];
+	MaxSunAngle = config["MaxSunAngle"];
+	CheckSunAngle = config["CheckSunAngle"];
+	ssid = config["ssid"].as<String>();
+	pass = config["pass"].as<String>();
+	RigaSun = SolarPosition(config["Latitude"].as<float>(), config["Longitude"].as<float>());
+	if (config["Flip"])
+		u8g2.setFlipMode(1);
+	else
+		u8g2.setFlipMode(0);
+	bool SpeedBoot = config["SpeedBoot"];
+	SdCard.close();
+
+	if (!SpeedBoot)
+		delay(500);
+
+
+
+
+
+	loadingBar(20, "Connecting to Wi-Fi", true);
 	WiFi.begin(ssid, pass);
 	WiFi.hostname("espMain");
+	int i = 1;
 	while (WiFi.status() != WL_CONNECTED)
 	{
 		digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 		delay(500);
+		i++;
+		if (i > 10)
+			loadingBar(29 + (i % 2), "Connecting to Wi-Fi", false);
+		else
+			loadingBar(20 + i, "Connecting to Wi-Fi", false);
+	}
+	loadingBar(30, "Wi-Fi done", false);
+	if (!SpeedBoot)
+	delay(500);
+
+	loadingBar(30, "Getting time", true);
+	timeClient.begin();
+	timeClient.setTimeOffset(3600 * timeZone);
+	timeClient.update();
+	time_t epochTime = timeClient.getEpochTime();
+	struct tm *ptm = gmtime((time_t *)&epochTime);
+	loadingBar(40, String(ptm->tm_mday) + "/" + String(ptm->tm_mon + 1) + "/" + String(ptm->tm_year + 1900), true);
+	loadingBar(40, timeClient.getFormattedTime(), true);
+	if (!SpeedBoot)
+	delay(1500);
+
+	SdCard = SD.open("modules.json", FILE_READ);
+	if (SdCard.available())
+		loadingBar(60, "Got modules", true);
+	else
+	{
+		loadingBar(0, "Mising modules.json", true);
+		delay(5000);
+		ESP.restart();
 	}
 
-	//const size_t capacity = JSON_OBJECT_SIZE(3) + JSON_ARRAY_SIZE(2) + 60;
-	SD.begin(D8);
-	SdCard = SD.open("modules.json");
+	if (!SpeedBoot)
+		delay(500);
+
+	loadingBar(70, "IP: " + WiFi.localIP().toString(), true);
 	String pp = SdCard.readString();
-	//pp.trim();
+	if (!SpeedBoot)
+	delay(500);
+	// pp.trim();
 	Serial.println(pp);
 	Serial.println("Got IP: " + WiFi.localIP().toString());
-	//const char* ssid = pp;
+	// const char* ssid = pp;
 	DeserializationError err = deserializeJson(doc, pp);
 	Serial.println(err.c_str());
 	Serial.println(doc["devices"].size());
+	u8g2.clearDisplay();
 	if (1)
 		for (int i = 0; i < 27; i++)
 		{
@@ -82,10 +239,13 @@ void setup()
 			String serverPath = "http://" + doc["devices"][i]["IP"].as<String>() + "/espinator/UThere";
 			http.setTimeout(300);
 			http.begin(client, serverPath.c_str());
-			int httpCode = http.GET();
+			// int httpCode = http.GET();
+			http.GET();
 			doc["devices"][i]["found"] = false;
 			if (http.getString() != "")
+			{
 				doc["devices"][i]["found"] = true;
+			}
 			else
 				doc["devices"][i]["found"] = false;
 
@@ -132,39 +292,49 @@ void setup()
 		}
 	Blank();
 	SdCard.close();
+	SD.remove("modules.json");
+	SdCard = SD.open("modules.json", FILE_WRITE);
+	serializeJson(doc, SdCard);
+	SdCard.close();
+
 	server.on("/espinator/MyData", HandleMyData);
 	server.begin();
 	pinMode(0, INPUT_PULLUP);
+	loadingBar(100, "Found: " + String(GetFounds()) + "/27", true);
+	loadingBar(100, "Done!", true);
+	if (!SpeedBoot)
+	delay(1000);
 }
 bool Up = false;
 bool Down = false;
 bool UpRn = false;
 bool DownRn = false;
-bool butonRn = false;
-bool buton = false;
-bool butonOld = false;
+bool buttonRn = false;
+bool button = false;
+bool buttonOld = false;
 void handleInput()
 {
 	UpRn = false;
 	DownRn = false;
-	butonRn = false;
-	buton = digitalRead(0);
+	buttonRn = false;
+	button = digitalRead(0);
 	int a = analogRead(0);
-	if (buton != butonOld && buton == false)
-		butonRn = true;
+	if (button != buttonOld && button == false)
+		buttonRn = true;
 	if (a > 750)
-	{
-		if (!Up)
-			UpRn = true;
-		Up = true;
-		Down = false;
-	}
-	else if (a < 250)
 	{
 		if (!Down)
 			DownRn = true;
 		Up = false;
 		Down = true;
+	}
+	else if (a < 250)
+	{
+
+		if (!Up)
+			UpRn = true;
+		Up = true;
+		Down = false;
 	}
 	else
 	{
@@ -172,7 +342,8 @@ void handleInput()
 		Down = false;
 	}
 
-	butonOld = buton;
+	buttonOld = button;
+	// u8g2.setFont(u8g2_font_6x13_tr); u8g2.drawStr(0,64,("Ram:"+String(system_get_free_heap_size())).c_str());
 }
 void ConnectedOnes()
 {
@@ -181,14 +352,14 @@ void ConnectedOnes()
 		u8g2.clearBuffer();
 		server.handleClient();
 		handleInput();
-		if (butonRn)
+		if (buttonRn)
 		{
 			break;
 		}
 		for (int i = 0; i < 27; i++)
 		{
 			u8g2.setFont(u8g2_font_profont12_tr);
-			//u8g2.set
+			// u8g2.set
 			if (!doc["devices"][i]["found"])
 				u8g2.setDrawColor(1);
 			else
@@ -235,24 +406,73 @@ void ConnectedOnes()
 	u8g2.clearBuffer();
 	u8g2.sendBuffer();
 }
-//DynamicJsonDocument Framies(16384*2);
-String getValue(String data, char separator, int index)
-{
-	int found = 0;
-	int strIndex[] = {0, -1};
-	int maxIndex = data.length() - 1;
 
-	for (int i = 0; i <= maxIndex && found <= index; i++)
+void Info1()
+{
+	timeClient.update();
+	while (true)
 	{
-		if (data.charAt(i) == separator || i == maxIndex)
+		u8g2.clearBuffer();
+		server.handleClient();
+		handleInput();
+		if (buttonRn)
 		{
-			found++;
-			strIndex[0] = strIndex[1] + 1;
-			strIndex[1] = (i == maxIndex) ? i + 1 : i;
+			break;
 		}
+		time_t epochTime = timeClient.getEpochTime();
+		struct tm *ptm = gmtime((time_t *)&epochTime);
+		u8g2.setFont(u8g2_font_6x13_tf);
+		u8g2.setCursor(1, 11 * 1);
+		u8g2.print("Time:" + timeClient.getFormattedTime());
+		u8g2.setCursor(1, 11 * 2);
+		u8g2.print("Date:" + String(ptm->tm_mday) + "/" + String(ptm->tm_mon + 1) + "/" + String(ptm->tm_year + 1900));
+		u8g2.setCursor(1, 11 * 3);
+		u8g2.print("IP: " + WiFi.localIP().toString());
+		u8g2.setCursor(1, 11 * 4);
+		u8g2.print("Found: " + String(GetFounds()) + "/27");
+		u8g2.setCursor(1, 11 * 5);
+		u8g2.print("Sun: " + String(RigaSun.getSolarElevation(epochTime - 3600 * 2)) + "deg");
+		u8g2.sendBuffer();
 	}
-	return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+	u8g2.clearBuffer();
+	u8g2.sendBuffer();
 }
+void Info()
+{
+	Info1();
+	timeClient.update();
+	while (true)
+	{
+		u8g2.clearBuffer();
+		server.handleClient();
+		handleInput();
+		if (buttonRn)
+		{
+			break;
+		}
+		//time_t epochTime = timeClient.getEpochTime();
+		//struct tm *ptm = gmtime((time_t *)&epochTime);
+		u8g2.setFont(u8g2_font_6x13_tf);
+		u8g2.setCursor(1, 11 * 1);
+		u8g2.print("Stop time:" + String(startTime.tm_hour)+":"+String(startTime.tm_min));
+		u8g2.setCursor(1, 11 * 2);
+		u8g2.print("Start time:" + String(endTime.tm_hour)+":"+String(endTime.tm_min));
+		u8g2.setCursor(1, 11 * 3);
+		u8g2.print("ssid: " + ssid);
+		u8g2.setCursor(1, 11 * 4);
+		if(timeZone<0)
+			u8g2.print("TimeZone:" + String(timeZone));
+		else
+			u8g2.print("TimeZone:+" + String(timeZone));
+		//u8g2.setCursor(1, 11 * 5);
+		//u8g2.print("Sun: " + String(RigaSun.getSolarElevation(epochTime - 3600 * 2)) + "deg");
+		u8g2.sendBuffer();
+	}
+	u8g2.clearBuffer();
+	u8g2.sendBuffer();
+}
+// DynamicJsonDocument Frames(16384*2);
+
 void Blinky(String name)
 {
 	u8g2.clearBuffer();
@@ -262,83 +482,138 @@ void Blinky(String name)
 	handleInput();
 	handleInput();
 	Serial.println("started");
-	//SdCard = SD.open("random.dat");
+	// SdCard = SD.open("random.dat");
 	SdCard = SD.open(name);
 	Serial.println("open:" + name);
-	//const char* cstr = name;
-	//std::string pps(cstr);
+	// const char* cstr = name;
+	// std::string pps(cstr);
 	int frames = getValue(name, '_', 0).toInt();
 	Serial.println("Created");
 	SdCard.read((uint8_t *)&pp, sizeof(pp));
 	Serial.print("read pp:");
 	Serial.println(SdCard.readString());
-	float biges = 0;
 	int frame = 0;
 	int frame2 = 0;
 	bool runing = true;
+
 	while (runing)
-		for (int f = 0; f < frames; f++)
+	{
+		u8g2.clearBuffer();
+		handleInput();
+		if (frame > 255)
 		{
-			u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
-			for (int y = 0; y < 9; y++)
-				for (int x = 0; x < 3; x++)
-				{
-					int led = y * 3 + x;
-					u8g2.setCursor(y * 13 + 10, x * 13 + 20);
-					int fuR = pp[f * 27 * sizeof(color) + led * sizeof(color) + 0] * 2;
-					int fuG = pp[f * 27 * sizeof(color) + led * sizeof(color) + 1] * 2;
-					int fuB = pp[f * 27 * sizeof(color) + led * sizeof(color) + 2] * 2;
-					int coli = (fuR + fuG + fuB) / 3;
-					char myASCII[] = " .:-=+*#%@";
-					char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
-					if (coli > 230)
-						ap = '@';
-					u8g2.print(ap);
-				}
-			u8g2.sendBuffer();
-			handleInput();
-			biges += 0.2;
-			if (frame > 255)
-			{
-				frame = 0;
-				frame2++;
-			}
-			uint8_t a = (sin(biges) + 1) / 2 * 255;
-			long startMilis = millis();
-			server.handleClient();
+			frame = 0;
+			frame2++;
+		}
+		if (frame2 > 255)
+			frame2 = 0;
+		server.handleClient();
 
-			if (butonRn)
-			{
-				runing = false;
-				break;
-			}
-			for (int i = 0; i < 27; i++)
-			{
-				IPAddress pps;
-				pps.fromString(doc["devices"][i]["IP"].as<String>());
-				if(doc["devices"][i]["found"])
-				for (int j = 0; j < 16; j++)
-				{
-					UDP.beginPacket(pps, UDP_PORT);
-
-					//for (int jj = 0; jj < 16; jj++)
-					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
-					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
-					UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
-					UDP.write(f);
-					UDP.write(frame2);
-					UDP.endPacket();
-				}
-
-				delay(1);
-			}
-
-			if ((millis() - startMilis) < 100)
-			{
-				delay(100 - (millis() - startMilis));
-			}
+		if (buttonRn)
+		{
+			runing = false;
+			break;
 		}
 
+		// this is really dum but it works
+		time_t epochTime = timeClient.getEpochTime();
+		// struct tm *ptm = gmtime((time_t *)&epochTime);
+		tm time;
+		time.tm_sec = second(epochTime);
+		time.tm_min = minute(epochTime);
+		time.tm_hour = hour(epochTime);
+		time.tm_mday = day(epochTime);
+		time.tm_mon = month(epochTime) - 1;
+		time.tm_year = year(epochTime) - 1900;
+
+		startTime.tm_mday = day(epochTime);
+		startTime.tm_mon = month(epochTime) - 1;
+		startTime.tm_year = year(epochTime) - 1900;
+		startTime.tm_sec = 0;
+
+		endTime.tm_mday = day(epochTime);
+		endTime.tm_mon = month(epochTime) - 1;
+		endTime.tm_year = year(epochTime) - 1900;
+		endTime.tm_sec = 0;
+		time_t time_epoch = mktime(&time);
+		time_t endTime_epoch = mktime(&endTime);
+		time_t startTime_epoch = mktime(&startTime);
+		time_t TimeToEnd = endTime_epoch - time_epoch;
+		time_t TimeToStart = startTime_epoch - time_epoch;
+		bool dont = TimeToStart < 0 && TimeToEnd > 0;
+
+		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle || !CheckSunAngle) && (!dont || !CheckTime))
+			for (int f = 0; f < frames; f++)
+			{
+				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
+				for (int y = 0; y < 9; y++)
+					for (int x = 0; x < 3; x++)
+					{
+						int led = y * 3 + x;
+						u8g2.setCursor(y * 13 + 10, x * 13 + 20);
+						int fuR = pp[f * 27 * sizeof(color) + led * sizeof(color) + 0] * 2;
+						int fuG = pp[f * 27 * sizeof(color) + led * sizeof(color) + 1] * 2;
+						int fuB = pp[f * 27 * sizeof(color) + led * sizeof(color) + 2] * 2;
+						int coli = (fuR + fuG + fuB) / 3;
+						char myASCII[] = " .:-=+*#%@";
+						char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
+						if (coli > 230)
+							ap = '@';
+						u8g2.print(ap);
+					}
+				u8g2.sendBuffer();
+				handleInput();
+				if (frame > 255)
+				{
+					frame = 0;
+					frame2++;
+				}
+				long startMilis = millis();
+				server.handleClient();
+
+				if (buttonRn)
+				{
+					runing = false;
+					break;
+				}
+				for (int i = 0; i < 27; i++)
+				{
+					IPAddress pps;
+					pps.fromString(doc["devices"][i]["IP"].as<String>());
+					if (doc["devices"][i]["found"])
+						for (int j = 0; j < 16; j++)
+						{
+							UDP.beginPacket(pps, UDP_PORT);
+
+							// for (int jj = 0; jj < 16; jj++)
+							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
+							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
+							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
+							UDP.write(f);
+							UDP.write(frame2);
+							UDP.endPacket();
+						}
+
+					delay(1);
+				}
+
+				if ((millis() - startMilis) < 100)
+				{
+					delay(100 - (millis() - startMilis));
+				}
+			}
+		else
+		{
+			u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
+			u8g2.setCursor(1, 10);
+			u8g2.print("Time to start:");
+			u8g2.setCursor(1, 20);
+			u8g2.print(String(TimeToEnd));
+			u8g2.sendBuffer();
+			// delay(20);
+		}
+		// delete ptm;
+	}
 	Blank();
 	Serial.println("Send done");
 	SdCard.close();
@@ -348,9 +623,8 @@ int animSelect = 0;
 bool isAnim(const std::string &str)
 {
 	std::string suffix = ".dat";
-	bool result = false;
 	return (str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0);
-	//return(true);
+	// return(true);
 }
 void Anims()
 {
@@ -430,7 +704,7 @@ void Anims()
 					u8g2.print(AnimList[i]);
 			}
 		}
-		if (butonRn)
+		if (buttonRn)
 		{
 			if (animSelect == 0)
 				break;
@@ -441,7 +715,7 @@ void Anims()
 	}
 }
 
-String menu[4] = {"Connected", "Anim", "Other2", "Other3"};
+String menu[4] = {"Connected", "Anim", "Info", "Reboot"};
 int selection = 0;
 void loop()
 {
@@ -469,12 +743,16 @@ void loop()
 		else
 			u8g2.print(menu[i]);
 	}
-	if (butonRn)
+	if (buttonRn)
 	{
 		if (selection == 0)
 			ConnectedOnes();
 		if (selection == 1)
 			Anims();
+		if (selection == 2)
+			Info();
+		if (selection == 3)
+			ESP.restart();
 	}
 	u8g2.sendBuffer();
 	delay(50);
@@ -483,22 +761,15 @@ void HandleMyData()
 {
 	if (server.arg("Mac") != "" && server.arg("IP") != "" && server.arg("ID") != "")
 	{
-		SdCard = SD.open("modules.json", 2);
 		Serial.println(atoi(server.arg("ID").c_str()));
-		//for (int i = 0; i < doc["devices"].size(); i++)
-		//{
-			//if (int(doc["devices"][i]["id"]) == server.arg("ID").c_str())
-			//{
-				server.send(200, "application/json", "{\"found\":true\"}");
-
-				doc["devices"][atoi(server.arg("ID").c_str())]["IP"] = server.arg("IP");
-				doc["devices"][atoi(server.arg("ID").c_str())]["Mac"] = server.arg("Mac");
-				doc["devices"][atoi(server.arg("ID").c_str())]["found"] = true;
-				//break;
-			//}
-		//}
+		server.send(200, "application/json", "{\"found\":true\"}");
+		doc["devices"][atoi(server.arg("ID").c_str())]["IP"] = server.arg("IP");
+		doc["devices"][atoi(server.arg("ID").c_str())]["Mac"] = server.arg("Mac");
+		doc["devices"][atoi(server.arg("ID").c_str())]["found"] = true;
 		Serial.println(doc.as<String>());
 		server.send(200, "application/json", "{ \"found\":false}");
+		SD.remove("modules.json");
+		SdCard = SD.open("modules.json", FILE_WRITE);
 		serializeJson(doc, SdCard);
 		SdCard.close();
 	}

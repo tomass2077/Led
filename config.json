@@ -1,0 +1,14 @@
+{
+  "CheckSunAngle": false,
+  "CheckTime": false,
+  "Flip": true,
+  "Latitude": 56,
+  "Longitude": 24,
+  "MaxSunAngle": "2",
+  "SpeedBoot": false,
+  "StartInEvening": "16:00",
+  "StopInMorning": "11:20",
+  "TimeZone": 2,
+  "pass": "***pass***",
+  "ssid": "***ssid***"
+}

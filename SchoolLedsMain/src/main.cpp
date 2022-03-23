@@ -104,6 +104,13 @@ void loadingBar(int filled, String txt, bool scroll)
 	}
 	u8g2.sendBuffer();
 }
+void loadingBar(int filled)
+{
+	int with = 100;
+	int height = 10;
+	u8g2.drawFrame(128 / 2 - with / 2, 64 - height, with, height);
+	u8g2.drawBox(128 / 2 - with / 2, 64 - height, filled, height);
+}
 
 int GetFounds()
 {
@@ -137,10 +144,6 @@ void setup()
 	else
 		loadingBar(10, "SD initialized", true);
 
-
-
-
-
 	SdCard = SD.open("config.json", FILE_READ);
 	if (SdCard.available())
 		loadingBar(20, "Got config", true);
@@ -173,10 +176,6 @@ void setup()
 	if (!SpeedBoot)
 		delay(500);
 
-
-
-
-
 	loadingBar(20, "Connecting to Wi-Fi", true);
 	WiFi.begin(ssid, pass);
 	WiFi.hostname("espMain");
@@ -193,7 +192,7 @@ void setup()
 	}
 	loadingBar(30, "Wi-Fi done", false);
 	if (!SpeedBoot)
-	delay(500);
+		delay(500);
 
 	loadingBar(30, "Getting time", true);
 	timeClient.begin();
@@ -204,7 +203,7 @@ void setup()
 	loadingBar(40, String(ptm->tm_mday) + "/" + String(ptm->tm_mon + 1) + "/" + String(ptm->tm_year + 1900), true);
 	loadingBar(40, timeClient.getFormattedTime(), true);
 	if (!SpeedBoot)
-	delay(1500);
+		delay(1500);
 
 	SdCard = SD.open("modules.json", FILE_READ);
 	if (SdCard.available())
@@ -222,7 +221,7 @@ void setup()
 	loadingBar(70, "IP: " + WiFi.localIP().toString(), true);
 	String pp = SdCard.readString();
 	if (!SpeedBoot)
-	delay(500);
+		delay(500);
 	// pp.trim();
 	Serial.println(pp);
 	Serial.println("Got IP: " + WiFi.localIP().toString());
@@ -303,7 +302,7 @@ void setup()
 	loadingBar(100, "Found: " + String(GetFounds()) + "/27", true);
 	loadingBar(100, "Done!", true);
 	if (!SpeedBoot)
-	delay(1000);
+		delay(1000);
 }
 bool Up = false;
 bool Down = false;
@@ -450,22 +449,22 @@ void Info()
 		{
 			break;
 		}
-		//time_t epochTime = timeClient.getEpochTime();
-		//struct tm *ptm = gmtime((time_t *)&epochTime);
+		// time_t epochTime = timeClient.getEpochTime();
+		// struct tm *ptm = gmtime((time_t *)&epochTime);
 		u8g2.setFont(u8g2_font_6x13_tf);
 		u8g2.setCursor(1, 11 * 1);
-		u8g2.print("Stop time:" + String(startTime.tm_hour)+":"+String(startTime.tm_min));
+		u8g2.print("Stop time:" + String(startTime.tm_hour) + ":" + String(startTime.tm_min));
 		u8g2.setCursor(1, 11 * 2);
-		u8g2.print("Start time:" + String(endTime.tm_hour)+":"+String(endTime.tm_min));
+		u8g2.print("Start time:" + String(endTime.tm_hour) + ":" + String(endTime.tm_min));
 		u8g2.setCursor(1, 11 * 3);
 		u8g2.print("ssid: " + ssid);
 		u8g2.setCursor(1, 11 * 4);
-		if(timeZone<0)
+		if (timeZone < 0)
 			u8g2.print("TimeZone:" + String(timeZone));
 		else
 			u8g2.print("TimeZone:+" + String(timeZone));
-		//u8g2.setCursor(1, 11 * 5);
-		//u8g2.print("Sun: " + String(RigaSun.getSolarElevation(epochTime - 3600 * 2)) + "deg");
+		// u8g2.setCursor(1, 11 * 5);
+		// u8g2.print("Sun: " + String(RigaSun.getSolarElevation(epochTime - 3600 * 2)) + "deg");
 		u8g2.sendBuffer();
 	}
 	u8g2.clearBuffer();
@@ -541,46 +540,51 @@ void Blinky(String name)
 		time_t TimeToEnd = endTime_epoch - time_epoch;
 		time_t TimeToStart = startTime_epoch - time_epoch;
 		bool dont = TimeToStart < 0 && TimeToEnd > 0;
-
+		loadingBarClear();
+		long startMilis = 0;
 		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle || !CheckSunAngle) && (!dont || !CheckTime))
-			for (int f = 0; f < frames; f++)
-			{
-				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
-				for (int y = 0; y < 9; y++)
-					for (int x = 0; x < 3; x++)
-					{
-						int led = y * 3 + x;
-						u8g2.setCursor(y * 13 + 10, x * 13 + 20);
-						int fuR = pp[f * 27 * sizeof(color) + led * sizeof(color) + 0] * 2;
-						int fuG = pp[f * 27 * sizeof(color) + led * sizeof(color) + 1] * 2;
-						int fuB = pp[f * 27 * sizeof(color) + led * sizeof(color) + 2] * 2;
-						int coli = (fuR + fuG + fuB) / 3;
-						char myASCII[] = " .:-=+*#%@";
-						char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
-						if (coli > 230)
-							ap = '@';
-						u8g2.print(ap);
-					}
-				u8g2.sendBuffer();
-				handleInput();
-				if (frame > 255)
+			if (frames > 0)
+				for (int f = 0; f < frames; f++)
 				{
-					frame = 0;
-					frame2++;
-				}
-				long startMilis = millis();
-				server.handleClient();
 
-				if (buttonRn)
-				{
-					runing = false;
-					break;
-				}
-				for (int i = 0; i < 27; i++)
-				{
-					IPAddress pps;
-					pps.fromString(doc["devices"][i]["IP"].as<String>());
-					if (doc["devices"][i]["found"])
+					u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
+					for (int y = 0; y < 9; y++)
+						for (int x = 0; x < 3; x++)
+						{
+							int led = y * 3 + x;
+							u8g2.setCursor(y * 13 + 10, x * 13 + 20);
+							int fuR = pp[f * 27 * sizeof(color) + led * sizeof(color) + 0] * 2;
+							int fuG = pp[f * 27 * sizeof(color) + led * sizeof(color) + 1] * 2;
+							int fuB = pp[f * 27 * sizeof(color) + led * sizeof(color) + 2] * 2;
+							int coli = (fuR + fuG + fuB) / 3;
+							char myASCII[] = " .:-=+*#%@";
+							char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
+							if (coli > 230)
+								ap = '@';
+							u8g2.print(ap);
+						}
+
+					handleInput();
+					if (frame > 255)
+					{
+						frame = 0;
+						frame2++;
+					}
+
+					server.handleClient();
+
+					if (buttonRn)
+					{
+						runing = false;
+						break;
+					}
+					for (int i = 0; i < 27; i++)
+					{
+						IPAddress pps;
+						pps.fromString(doc["devices"][i]["IP"].as<String>());
+						//if (i == 0)
+						//	pps.fromString("192.168.72.210");
+						// if (doc["devices"][i]["found"])
 						for (int j = 0; j < 16; j++)
 						{
 							UDP.beginPacket(pps, UDP_PORT);
@@ -594,13 +598,90 @@ void Blinky(String name)
 							UDP.endPacket();
 						}
 
-					delay(1);
+						delay(1);
+					}
+					loadingBar(int(float(f) / float(frames) * 100));
+					u8g2.setFont(u8g2_font_6x13_tr);
+					u8g2.setCursor(1, 11);
+					int timeMillis = millis() - startMilis;
+					// u8g2.clearBuffer();
+					if ((100 - timeMillis) > 0)
+					{
+						delay(100 - timeMillis);
+					}
+					timeMillis = millis() - startMilis;
+					u8g2.print("FPS:" + String(1000 / timeMillis));
+					u8g2.sendBuffer();
+					u8g2.clearBuffer();
+					startMilis = millis();
+				}
+			else
+			{
+				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
+				for (int y = 0; y < 9; y++)
+					for (int x = 0; x < 3; x++)
+					{
+						int led = y * 3 + x;
+						u8g2.setCursor(y * 13 + 10, x * 13 + 20);
+						int fuR = pp[led * sizeof(color) + 0] * 2;
+						int fuG = pp[led * sizeof(color) + 1] * 2;
+						int fuB = pp[led * sizeof(color) + 2] * 2;
+						int coli = (fuR + fuG + fuB) / 3;
+						char myASCII[] = " .:-=+*#%@";
+						char ap = myASCII[int(float(coli) / 255 * (sizeof(myASCII) / sizeof(*myASCII)))];
+						if (coli > 230)
+							ap = '@';
+						u8g2.print(ap);
+					}
+
+				handleInput();
+				if (frame > 255)
+				{
+					frame = 0;
+					frame2++;
 				}
 
-				if ((millis() - startMilis) < 100)
+				server.handleClient();
+
+				if (buttonRn)
 				{
-					delay(100 - (millis() - startMilis));
+					runing = false;
+					break;
 				}
+				for (int i = 0; i < 27; i++)
+				{
+					IPAddress pps;
+					pps.fromString(doc["devices"][i]["IP"].as<String>());
+					//if (i == 0)
+					//	pps.fromString("192.168.72.210");
+					// if (doc["devices"][i]["found"])
+					for (int j = 0; j < 16; j++)
+					{
+						UDP.beginPacket(pps, UDP_PORT);
+
+						// for (int jj = 0; jj < 16; jj++)
+						UDP.write(uint8_t(pp[i * sizeof(color) + 0] * 2));
+						UDP.write(uint8_t(pp[i * sizeof(color) + 1] * 2));
+						UDP.write(uint8_t(pp[i * sizeof(color) + 2] * 2));
+						UDP.write(rand()% 255);
+						UDP.write(frame2);
+						UDP.endPacket();
+					}
+
+					delay(1);
+				}
+				u8g2.setFont(u8g2_font_6x13_tr);
+				u8g2.setCursor(1, 11);
+				int timeMillis = millis() - startMilis;
+				// u8g2.clearBuffer();
+				if ((1000 - timeMillis) > 0)
+				{
+					delay(1000 - timeMillis);
+				}
+				timeMillis = millis() - startMilis;
+				u8g2.sendBuffer();
+				u8g2.clearBuffer();
+				startMilis = millis();
 			}
 		else
 		{
@@ -698,6 +779,12 @@ void Anims()
 			if (why >= 0 && why < 4)
 			{
 				u8g2.setCursor(10, 12 + why * 12);
+				if(i!=0)
+				if (animSelect == i)
+					u8g2.print("| " + getValue(getValue(AnimList[i], '_', 1), '.', 0));
+				else
+					u8g2.print(getValue(getValue(AnimList[i], '_', 1), '.', 0));
+				else
 				if (animSelect == i)
 					u8g2.print("| " + AnimList[i]);
 				else
@@ -715,7 +802,7 @@ void Anims()
 	}
 }
 
-String menu[4] = {"Connected", "Anim", "Info", "Reboot"};
+String menu[4] = {"Connected", "Animations", "Info", "Reboot"};
 int selection = 0;
 void loop()
 {

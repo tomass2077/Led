@@ -1,28 +1,28 @@
-from asyncio import windows_events
-from ctypes import alignment
-from dataclasses import replace
-from logging import PlaceHolder
+#from asyncio import windows_events
+#from ctypes import alignment
+#from dataclasses import replace
+#from logging import PlaceHolder
 from msilib.schema import TextStyle
-from re import X
-from socket import timeout
-from telnetlib import IP
+#from re import X
+#from socket import timeout
+#from telnetlib import IP
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import CENTER, filedialog as fd
 from tkinter.colorchooser import askcolor
 from numpy import spacing
 from ttkthemes  import ThemedTk
-from ttkthemes  import ThemedStyle
+#from ttkthemes  import ThemedStyle
 from time import sleep
 import cv2
 import numpy as np
-import os
-import math
+#import os
+#import math
 from functools import partial
-from ttkwidgets import Calendar
+#from ttkwidgets import Calendar
 import json
 from tkintermapview import TkinterMapView
-import sys
+#import sys
 import serial
 import serial.tools.list_ports
 

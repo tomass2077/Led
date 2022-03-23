@@ -11,7 +11,7 @@
 #define UDP_PORT 4210
 #define DATA_PIN 2
 #define COLOR_ORDER GRB
-#define NUM_LEDS 30
+#define NUM_LEDS 60
 #define LED_TYPE WS2812
 #define BRIGHTNESS 64
 CRGB leds[NUM_LEDS];

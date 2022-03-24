@@ -177,8 +177,15 @@ void setup()
 		delay(500);
 
 	loadingBar(20, "Connecting to Wi-Fi", true);
-	WiFi.begin(ssid, pass);
+
+	IPAddress ip(192, 168, 1, 200);
+  	IPAddress gateway(192, 168, 1, 1);
+  	IPAddress subnet(255, 255, 255, 0);
+  	WiFi.config(ip, gateway, subnet);
 	WiFi.hostname("espMain");
+  	WiFi.disconnect();
+	WiFi.begin(ssid, pass);
+	
 	int i = 1;
 	while (WiFi.status() != WL_CONNECTED)
 	{

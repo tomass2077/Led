@@ -45,7 +45,7 @@ String getValue(String data, char separator, int index)
 	}
 	return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
-//Writes Mains IP
+// Writes Mains IP
 void WriteIP(String ip)
 {
 	int addr = 1;
@@ -70,7 +70,7 @@ void WriteIP(String ip)
 	IP = (String)num1 + (String)num2 + (String)num3 + (String)num4;
 	EEPROM.commit();
 }
-//gets Mains IP saved
+// gets Mains IP saved
 String GetIP()
 {
 	int addr = 1;
@@ -92,7 +92,7 @@ String GetIP()
 	return (string);
 }
 
-//Writes  ID
+// Writes  ID
 void WriteID(uint8_t ip)
 {
 	EEPROM.write(0, ip);
@@ -103,9 +103,9 @@ void Writessid(String str)
 {
 	int addr = 5;
 	char Char[20];
-	str.toCharArray(Char,20);
-	for(int i =0;i<20;i++)
-		EEPROM.write(i+addr, Char[i]);
+	str.toCharArray(Char, 20);
+	for (int i = 0; i < 20; i++)
+		EEPROM.write(i + addr, Char[i]);
 
 	EEPROM.commit();
 }
@@ -113,9 +113,9 @@ void Writepass(String str)
 {
 	int addr = 25;
 	char Char[20];
-	str.toCharArray(Char,20);
-	for(int i =0;i<20;i++)
-		EEPROM.write(i+addr, Char[i]);
+	str.toCharArray(Char, 20);
+	for (int i = 0; i < 20; i++)
+		EEPROM.write(i + addr, Char[i]);
 
 	EEPROM.commit();
 }
@@ -123,17 +123,17 @@ String Getssid()
 {
 	int addr = 5;
 	char Char[20];
-	for(int i =0;i<20;i++)
-		EEPROM.get(i+addr, Char[i]);
-	return(Char);
+	for (int i = 0; i < 20; i++)
+		EEPROM.get(i + addr, Char[i]);
+	return (Char);
 }
 String Getpass()
 {
 	int addr = 25;
 	char Char[20];
-	for(int i =0;i<20;i++)
-		EEPROM.get(i+addr, Char[i]);
-	return(Char);
+	for (int i = 0; i < 20; i++)
+		EEPROM.get(i + addr, Char[i]);
+	return (Char);
 }
 
 struct Cola
@@ -151,7 +151,7 @@ Cola Interpolate(int r, int g, int b, int rOld, int gOld, int bOld, float t)
 	what.b = B;
 	return (what);
 }
-//gets ID saved
+// gets ID saved
 uint8_t GetID()
 {
 	uint8_t num1 = 0;
@@ -170,8 +170,7 @@ void CheckInputs()
 		IP = GetIP();
 		delay(200);
 		Serial.print("Ip set to:" + op);
-		
-	} 
+	}
 	if (op.startsWith("id"))
 	{
 		op.replace("id", "");
@@ -213,11 +212,11 @@ void setup()
 	Serial.println("ssid: " + ssid);
 	Serial.println("pass: " + pass);
 	Serial.println("Got ID: " + String(int(ID)));
-	//Led strip setup
+	// Led strip setup
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalLEDStrip);
-	
-	//Just blinkeys
+
+	// Just blinkeys
 	for (int i = 0; i < 6; i++)
 	{
 
@@ -235,10 +234,10 @@ void setup()
 	ssid = Getssid();
 	pass = Getpass();
 	FastLED.clear();
-	
+
 	WiFi.hostname("esp01");
 	Serial.begin(115200);
-	//Connect to wifi
+	// Connect to wifi
 	WiFi.begin(ssid, pass);
 	while (WiFi.status() != WL_CONNECTED)
 	{
@@ -255,7 +254,7 @@ void setup()
 	Serial.println("Got Mac: " + WiFi.macAddress());
 	Serial.println("Got IP: " + WiFi.localIP().toString());
 	Serial.println("Got ID: " + String(int(ID)));
-	//Server propeties
+	// Server propeties
 	server.on("/espinator/SetCol", HandleCol);
 	server.on("/espinator/UThere", UThere);
 	server.begin();
@@ -263,21 +262,22 @@ void setup()
 	// Get id and send ip from Mac
 	WiFiClient client;
 	HTTPClient http;
+	String asd = "espMain.local";
 	String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
-	http.setTimeout(200);
+	http.setTimeout(400);
 	http.begin(client, serverPath.c_str());
 	int httpCode = http.GET();
 
 	bool ledy = false;
 	bool searching = true;
-	//search for main server
+	// search for main server
 	while (searching)
 	{
 		CheckInputs();
 		if (httpCode != -1)
 		{
 			deserializeJson(doc, http.getString());
-			//ID = doc["id"].as<int>();
+			// ID = doc["id"].as<int>();
 			searching = false;
 			Serial.println("Found server" + (String)httpCode);
 		}
@@ -294,14 +294,13 @@ void setup()
 			Serial.println("can't find server" + (String)httpCode);
 		}
 		delay(10);
-
 	}
 
 	leds[0] = CRGB::Black;
 	FastLED.show();
 	Serial.println("Got ID: " + (String)ID);
 	blinky = false;
-	//digitalWrite(2, true);
+	// digitalWrite(2, true);
 	UDP.begin(UDP_PORT);
 
 	for (int i = 0; i < 2; i++)
@@ -316,7 +315,7 @@ void setup()
 	}
 }
 uint8_t packet[32];
-//int col = 0;
+// int col = 0;
 int OldColR = 0;
 int OldColG = 0;
 int OldColB = 0;
@@ -342,61 +341,62 @@ void loop()
 	if (packetSize)
 	{
 		int len = UDP.read(packet, 32);
-		//bool led = true;
+		// bool led = true;
 		if (len > 0)
 		{
 			packet[len] = '\0';
 		}
-			
-			NewFrame = packet[3];
-		//int Frame = packet[1] + (255 * packet[2]);
+		lastMilis =millis();
+		NewFrame = packet[3];
+		// int Frame = packet[1] + (255 * packet[2]);
 		if (OldFrame != NewFrame)
 		{
 			OldFrame = NewFrame;
 			OldColR = NewColR;
 			OldColG = NewColG;
 			OldColB = NewColB;
-			NewColR = 0;
-			NewColG = 0;
-			NewColB = 0;
+			NewColR = packet[0];
+			NewColG = packet[1];
+			NewColB = packet[2];
 			lastMilis = millis();
-			//Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
+			// Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
 		}
-		
 	}
-	float a = float(millis() - lastMilis) / 80;
+	float a = float(millis() - lastMilis) / 99;
 	if (a > 1)
 		a = 1;
 	if (a < 0)
 		a = 0;
 	Cola color = Interpolate(NewColR, NewColG, NewColB, OldColR, OldColG, OldColB, a);
 	FastLED.showColor(CRGB(color.r, color.g, color.b));
-	Serial.println(String(color.r) + " " + String(color.g) + " " + String(color.b)+" " + String(NewFrame)+" " + String(OldFrame));
+	Serial.println(String(color.r) + " " + String(color.g) + " " + String(color.b) + " " + String(NewFrame) + " " + String(OldFrame));
 	delay(1);
-	if(millis()-lastMilis>10000){
-	OldColR = NewColR;
-	OldColG = NewColG;
-	OldColB = NewColB;
-	NewColR = packet[0];
-	NewColG = packet[0];
-	NewColB = packet[0];
-	WiFiClient client;
-	HTTPClient http;
-	String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
-	http.setTimeout(400);
-	http.begin(client, serverPath.c_str());
-	int httpCode = http.GET();
-	CheckInputs();
+	if (millis() - lastMilis > 10000)
+	{
+		OldColR = NewColR;
+		OldColG = NewColG;
+		OldColB = NewColB;
+		NewColR = 0;
+		NewColG = 0;
+		NewColB = 0;
+		WiFiClient client;
+		HTTPClient http;
+		String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
+		http.setTimeout(150);
+		http.begin(client, serverPath.c_str());
+		int httpCode = http.GET();
+		CheckInputs();
+		lastMilis = millis();
 	}
 }
 
-//Server Asks
+// Server Asks
 void UThere()
 {
 	server.send(200, "application/json", "{ \"status\":\"ok\"}");
 	Serial.println("U There");
 }
-//Sent Col
+// Sent Col
 void HandleCol()
 {
 	if (server.arg("Col") != "")

@@ -3,6 +3,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266mDNS.h>
 #include <WiFiClient.h>
 #include <SPI.h>
 #include <SD.h>
@@ -178,14 +179,16 @@ void setup()
 
 	loadingBar(20, "Connecting to Wi-Fi", true);
 
-	IPAddress ip(192, 168, 1, 200);
-  	IPAddress gateway(192, 168, 1, 1);
-  	IPAddress subnet(255, 255, 255, 0);
-  	WiFi.config(ip, gateway, subnet);
+	//IPAddress ip(192, 168, 1, 132);
+	//IPAddress gateway(192, 168, 100, 1);
+	//IPAddress subnet(255, 255, 255, 0);
+	//WiFi.config(ip, gateway, subnet);
+	
 	WiFi.hostname("espMain");
-  	WiFi.disconnect();
+	 WiFi.disconnect();
 	WiFi.begin(ssid, pass);
 	
+
 	int i = 1;
 	while (WiFi.status() != WL_CONNECTED)
 	{
@@ -197,6 +200,10 @@ void setup()
 		else
 			loadingBar(20 + i, "Connecting to Wi-Fi", false);
 	}
+	//if (MDNS.begin("espMain"))
+	//{ // Start mDNS with name esp8266
+	//	Serial.println("MDNS started");
+	//}
 	loadingBar(30, "Wi-Fi done", false);
 	if (!SpeedBoot)
 		delay(500);
@@ -589,9 +596,9 @@ void Blinky(String name)
 					{
 						IPAddress pps;
 						pps.fromString(doc["devices"][i]["IP"].as<String>());
-						//if (i == 0)
+						// if (i == 0)
 						//	pps.fromString("192.168.72.210");
-						// if (doc["devices"][i]["found"])
+						//  if (doc["devices"][i]["found"])
 						for (int j = 0; j < 16; j++)
 						{
 							UDP.beginPacket(pps, UDP_PORT);
@@ -659,9 +666,9 @@ void Blinky(String name)
 				{
 					IPAddress pps;
 					pps.fromString(doc["devices"][i]["IP"].as<String>());
-					//if (i == 0)
+					// if (i == 0)
 					//	pps.fromString("192.168.72.210");
-					// if (doc["devices"][i]["found"])
+					//  if (doc["devices"][i]["found"])
 					for (int j = 0; j < 16; j++)
 					{
 						UDP.beginPacket(pps, UDP_PORT);
@@ -670,7 +677,7 @@ void Blinky(String name)
 						UDP.write(uint8_t(pp[i * sizeof(color) + 0] * 2));
 						UDP.write(uint8_t(pp[i * sizeof(color) + 1] * 2));
 						UDP.write(uint8_t(pp[i * sizeof(color) + 2] * 2));
-						UDP.write(rand()% 255);
+						UDP.write(rand() % 255);
 						UDP.write(frame2);
 						UDP.endPacket();
 					}
@@ -786,13 +793,12 @@ void Anims()
 			if (why >= 0 && why < 4)
 			{
 				u8g2.setCursor(10, 12 + why * 12);
-				if(i!=0)
-				if (animSelect == i)
-					u8g2.print("| " + getValue(getValue(AnimList[i], '_', 1), '.', 0));
-				else
-					u8g2.print(getValue(getValue(AnimList[i], '_', 1), '.', 0));
-				else
-				if (animSelect == i)
+				if (i != 0)
+					if (animSelect == i)
+						u8g2.print("| " + getValue(getValue(AnimList[i], '_', 1), '.', 0));
+					else
+						u8g2.print(getValue(getValue(AnimList[i], '_', 1), '.', 0));
+				else if (animSelect == i)
 					u8g2.print("| " + AnimList[i]);
 				else
 					u8g2.print(AnimList[i]);

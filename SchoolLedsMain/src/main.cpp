@@ -16,7 +16,6 @@
 #include <cstring>
 #include <SolarPosition.h>
 #include <NTPClient.h>
-//#include "LoadingBar.h"
 float timeZone = 2;
 float MaxSunAngle = 2;
 struct tm startTime;
@@ -178,16 +177,16 @@ void setup()
 		delay(500);
 
 	loadingBar(20, "Connecting to Wi-Fi", true);
+	Serial.print("MAC: ");
+	Serial.println(WiFi.macAddress());
+	// IPAddress ip(192, 168, 1, 132);
+	// IPAddress gateway(192, 168, 100, 1);
+	// IPAddress subnet(255, 255, 255, 0);
+	// WiFi.config(ip, gateway, subnet);
 
-	//IPAddress ip(192, 168, 1, 132);
-	//IPAddress gateway(192, 168, 100, 1);
-	//IPAddress subnet(255, 255, 255, 0);
-	//WiFi.config(ip, gateway, subnet);
-	
 	WiFi.hostname("espMain");
-	 WiFi.disconnect();
+	WiFi.disconnect();
 	WiFi.begin(ssid, pass);
-	
 
 	int i = 1;
 	while (WiFi.status() != WL_CONNECTED)
@@ -200,10 +199,10 @@ void setup()
 		else
 			loadingBar(20 + i, "Connecting to Wi-Fi", false);
 	}
-	//if (MDNS.begin("espMain"))
+	// if (MDNS.begin("espMain"))
 	//{ // Start mDNS with name esp8266
 	//	Serial.println("MDNS started");
-	//}
+	// }
 	loadingBar(30, "Wi-Fi done", false);
 	if (!SpeedBoot)
 		delay(500);
@@ -244,72 +243,7 @@ void setup()
 	Serial.println(err.c_str());
 	Serial.println(doc["devices"].size());
 	u8g2.clearDisplay();
-	if (1)
-		for (int i = 0; i < 27; i++)
-		{
-			WiFiClient client;
-			HTTPClient http;
-			String serverPath = "http://" + doc["devices"][i]["IP"].as<String>() + "/espinator/UThere";
-			http.setTimeout(300);
-			http.begin(client, serverPath.c_str());
-			// int httpCode = http.GET();
-			http.GET();
-			doc["devices"][i]["found"] = false;
-			if (http.getString() != "")
-			{
-				doc["devices"][i]["found"] = true;
-			}
-			else
-				doc["devices"][i]["found"] = false;
-
-			u8g2.setFont(u8g2_font_profont12_tr);
-
-			if (!doc["devices"][i]["found"])
-				u8g2.setDrawColor(1);
-			else
-				u8g2.setDrawColor(1);
-			int offset = 25;
-			if (i < 3)
-				u8g2.setCursor(5 + offset * 0, 9 + 9 * (i - 0));
-			else if (i < 6)
-				u8g2.setCursor(5 + offset * 1, 9 + 9 * (i - 3));
-			else if (i < 9)
-				u8g2.setCursor(5 + offset * 2, 9 + 9 * (i - 6));
-			else if (i < 12)
-				u8g2.setCursor(5 + offset * 3, 9 + 9 * (i - 9));
-			else if (i < 15)
-				u8g2.setCursor(5 + offset * 0, 15 + 9 * (i - 9));
-			else if (i < 18)
-				u8g2.setCursor(5 + offset * 1, 15 + 9 * (i - 12));
-			else if (i < 21)
-				u8g2.setCursor(5 + offset * 2, 15 + 9 * (i - 15));
-			else if (i < 24)
-				u8g2.setCursor(5 + offset * 3, 15 + 9 * (i - 18));
-			else if (i < 27)
-				u8g2.setCursor(5 + offset * 4, 15 + 9 * (i - 21));
-			if (doc["devices"][i]["found"])
-			{
-				if (i < 10)
-					u8g2.print(".0" + (String)i + ".");
-				else
-					u8g2.print("." + (String)i + ".");
-			}
-			else
-			{
-				if (i < 10)
-					u8g2.print("?0" + (String)i + "?");
-				else
-					u8g2.print("?" + (String)i + "?");
-			}
-			u8g2.sendBuffer();
-		}
-	Blank();
 	SdCard.close();
-	SD.remove("modules.json");
-	SdCard = SD.open("modules.json", FILE_WRITE);
-	serializeJson(doc, SdCard);
-	SdCard.close();
-
 	server.on("/espinator/MyData", HandleMyData);
 	server.begin();
 	pinMode(0, INPUT_PULLUP);
@@ -598,19 +532,19 @@ void Blinky(String name)
 						pps.fromString(doc["devices"][i]["IP"].as<String>());
 						// if (i == 0)
 						//	pps.fromString("192.168.72.210");
-						//  if (doc["devices"][i]["found"])
-						for (int j = 0; j < 16; j++)
-						{
-							UDP.beginPacket(pps, UDP_PORT);
+						if (doc["devices"][i]["found"])
+							for (int j = 0; j < 16; j++)
+							{
+								UDP.beginPacket(pps, UDP_PORT);
 
-							// for (int jj = 0; jj < 16; jj++)
-							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
-							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
-							UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
-							UDP.write(f);
-							UDP.write(frame2);
-							UDP.endPacket();
-						}
+								// for (int jj = 0; jj < 16; jj++)
+								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
+								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
+								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
+								UDP.write(f);
+								UDP.write(frame2);
+								UDP.endPacket();
+							}
 
 						delay(1);
 					}
@@ -668,19 +602,19 @@ void Blinky(String name)
 					pps.fromString(doc["devices"][i]["IP"].as<String>());
 					// if (i == 0)
 					//	pps.fromString("192.168.72.210");
-					//  if (doc["devices"][i]["found"])
-					for (int j = 0; j < 16; j++)
-					{
-						UDP.beginPacket(pps, UDP_PORT);
+					if (doc["devices"][i]["found"])
+						for (int j = 0; j < 16; j++)
+						{
+							UDP.beginPacket(pps, UDP_PORT);
 
-						// for (int jj = 0; jj < 16; jj++)
-						UDP.write(uint8_t(pp[i * sizeof(color) + 0] * 2));
-						UDP.write(uint8_t(pp[i * sizeof(color) + 1] * 2));
-						UDP.write(uint8_t(pp[i * sizeof(color) + 2] * 2));
-						UDP.write(rand() % 255);
-						UDP.write(frame2);
-						UDP.endPacket();
-					}
+							// for (int jj = 0; jj < 16; jj++)
+							UDP.write(uint8_t(pp[i * sizeof(color) + 0] * 2));
+							UDP.write(uint8_t(pp[i * sizeof(color) + 1] * 2));
+							UDP.write(uint8_t(pp[i * sizeof(color) + 2] * 2));
+							UDP.write(rand() % 255);
+							UDP.write(frame2);
+							UDP.endPacket();
+						}
 
 					delay(1);
 				}
@@ -867,10 +801,5 @@ void HandleMyData()
 		doc["devices"][atoi(server.arg("ID").c_str())]["Mac"] = server.arg("Mac");
 		doc["devices"][atoi(server.arg("ID").c_str())]["found"] = true;
 		Serial.println(doc.as<String>());
-		server.send(200, "application/json", "{ \"found\":false}");
-		SD.remove("modules.json");
-		SdCard = SD.open("modules.json", FILE_WRITE);
-		serializeJson(doc, SdCard);
-		SdCard.close();
 	}
 }

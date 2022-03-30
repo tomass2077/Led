@@ -180,7 +180,7 @@ def ImgConvertion(Nam,loc):
     buf = Colors
     fc = 0
     ret = True
-    file= open(loc+"0"+"_" + Nam+".dat","w+")
+    file= open(loc+"/0"+"_" + Nam+".dat","w+")
     for x in range(9):
          #print("");
          for y in range(3):
@@ -194,7 +194,6 @@ def ImgConvertion(Nam,loc):
              ProgressLabel.update()
                  #print(str(i)+" ", end = '')
             # i=i+1      
-    
     file.close()
 def convertImg():
     global ProgressLabel

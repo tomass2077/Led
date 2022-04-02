@@ -259,6 +259,7 @@ bool DownRn = false;
 bool buttonRn = false;
 bool button = false;
 bool buttonOld = false;
+long LastINPUT = 0;
 void handleInput()
 {
 	UpRn = false;
@@ -266,10 +267,12 @@ void handleInput()
 	buttonRn = false;
 	button = digitalRead(0);
 	int a = analogRead(0);
-	if (button != buttonOld && button == false)
-		buttonRn = true;
+	if (button != buttonOld && button == false){
+		LastINPUT =millis();
+		buttonRn = true;}
 	if (a > 750)
 	{
+		LastINPUT =millis();
 		if (!Down)
 			DownRn = true;
 		Up = false;
@@ -277,7 +280,7 @@ void handleInput()
 	}
 	else if (a < 250)
 	{
-
+		LastINPUT =millis();
 		if (!Up)
 			UpRn = true;
 		Up = true;
@@ -559,6 +562,8 @@ void Blinky(String name)
 					}
 					timeMillis = millis() - startMilis;
 					u8g2.print("FPS:" + String(1000 / timeMillis));
+					if(millis()-LastINPUT >10000)u8g2.clearBuffer();
+
 					u8g2.sendBuffer();
 					u8g2.clearBuffer();
 					startMilis = millis();
@@ -627,6 +632,7 @@ void Blinky(String name)
 					delay(1000 - timeMillis);
 				}
 				timeMillis = millis() - startMilis;
+				if(millis()-LastINPUT >10000)u8g2.clearBuffer();
 				u8g2.sendBuffer();
 				u8g2.clearBuffer();
 				startMilis = millis();
@@ -638,6 +644,7 @@ void Blinky(String name)
 			u8g2.print("Time to start:");
 			u8g2.setCursor(1, 20);
 			u8g2.print(String(TimeToEnd));
+			if(millis()-LastINPUT >10000)u8g2.clearBuffer();
 			u8g2.sendBuffer();
 			// delay(20);
 		}

@@ -16,6 +16,8 @@
 #include <cstring>
 #include <SolarPosition.h>
 #include <NTPClient.h>
+//#include <ESPAsyncTCP.h>
+//#include <ESPAsyncWebServer.h>
 float timeZone = 2;
 float MaxSunAngle = 2;
 struct tm startTime;
@@ -25,6 +27,7 @@ WiFiUDP UDP;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
 void HandleMyData();
 ESP8266WebServer server(80);
+// syncWebServer server(80);
 String ssid = "";
 String pass = "";
 const size_t capacity = 512 * 8;
@@ -259,17 +262,26 @@ bool DownRn = false;
 bool buttonRn = false;
 bool button = false;
 bool buttonOld = false;
-void handleInput()
+long lastInput = 0;
+long lastInputHandler = 0;
+long lastInputHandlerBlank = 0;
+void handleInput(bool hehe)
 {
+
 	UpRn = false;
 	DownRn = false;
 	buttonRn = false;
 	button = digitalRead(0);
 	int a = analogRead(0);
 	if (button != buttonOld && button == false)
+	{
+		lastInput = millis();
 		buttonRn = true;
+	}
+
 	if (a > 750)
 	{
+		lastInput = millis();
 		if (!Down)
 			DownRn = true;
 		Up = false;
@@ -277,7 +289,7 @@ void handleInput()
 	}
 	else if (a < 250)
 	{
-
+		lastInput = millis();
 		if (!Up)
 			UpRn = true;
 		Up = true;
@@ -290,6 +302,71 @@ void handleInput()
 	}
 
 	buttonOld = button;
+	Serial.print("Last InputHandler:");
+	Serial.println(millis() - lastInputHandler);
+	lastInputHandler = millis();
+	// u8g2.setFont(u8g2_font_6x13_tr); u8g2.drawStr(0,64,("Ram:"+String(system_get_free_heap_size())).c_str());
+}
+void handleInput()
+{
+
+	UpRn = false;
+	DownRn = false;
+	buttonRn = false;
+	button = digitalRead(0);
+	int a = analogRead(0);
+	if (button != buttonOld && button == false)
+	{
+		lastInput = millis();
+		buttonRn = true;
+	}
+
+	if (a > 750)
+	{
+		lastInput = millis();
+		if (!Down)
+			DownRn = true;
+		Up = false;
+		Down = true;
+	}
+	else if (a < 250)
+	{
+		lastInput = millis();
+		if (!Up)
+			UpRn = true;
+		Up = true;
+		Down = false;
+	}
+	else
+	{
+		Up = false;
+		Down = false;
+	}
+	if (millis() - lastInputHandlerBlank > 1000)
+	{
+		lastInputHandlerBlank=millis();
+		IPAddress pps;
+		for (int j = 0; j < 2; j++)
+			for (int i = 0; i < 27; i++)
+			{
+				pps.fromString(doc["devices"][i]["IP"].as<String>());
+				if (doc["devices"][i]["found"])
+				{
+
+					UDP.beginPacket(pps, UDP_PORT);
+					UDP.write(0);
+					UDP.write(0);
+					UDP.write(0);
+					UDP.write(rand() % 255);
+					UDP.write(0);
+					UDP.endPacket();
+				}
+			}
+	}
+	buttonOld = button;
+	Serial.print("Last InputHandler:");
+	Serial.println(millis() - lastInputHandler);
+	lastInputHandler = millis();
 	// u8g2.setFont(u8g2_font_6x13_tr); u8g2.drawStr(0,64,("Ram:"+String(system_get_free_heap_size())).c_str());
 }
 void ConnectedOnes()
@@ -425,9 +502,9 @@ void Blinky(String name)
 	u8g2.clearBuffer();
 	uint8_t color[5];
 	uint8_t pp[250 * 27 * sizeof(color)];
-	handleInput();
-	handleInput();
-	handleInput();
+	handleInput(true);
+	handleInput(true);
+	handleInput(true);
 	Serial.println("started");
 	// SdCard = SD.open("random.dat");
 	SdCard = SD.open(name);
@@ -446,7 +523,7 @@ void Blinky(String name)
 	while (runing)
 	{
 		u8g2.clearBuffer();
-		handleInput();
+		handleInput(true);
 		if (frame > 255)
 		{
 			frame = 0;
@@ -512,7 +589,7 @@ void Blinky(String name)
 							u8g2.print(ap);
 						}
 
-					handleInput();
+					handleInput(true);
 					if (frame > 255)
 					{
 						frame = 0;
@@ -558,10 +635,13 @@ void Blinky(String name)
 						delay(100 - timeMillis);
 					}
 					timeMillis = millis() - startMilis;
+					startMilis = millis();
 					u8g2.print("FPS:" + String(1000 / timeMillis));
+					if (millis() - lastInput > 10000)
+						u8g2.clearBuffer();
 					u8g2.sendBuffer();
 					u8g2.clearBuffer();
-					startMilis = millis();
+					
 				}
 			else
 			{
@@ -582,7 +662,7 @@ void Blinky(String name)
 						u8g2.print(ap);
 					}
 
-				handleInput();
+				handleInput(true);
 				if (frame > 255)
 				{
 					frame = 0;
@@ -627,6 +707,8 @@ void Blinky(String name)
 					delay(1000 - timeMillis);
 				}
 				timeMillis = millis() - startMilis;
+				if (millis() - lastInput > 10000)
+					u8g2.clearBuffer();
 				u8g2.sendBuffer();
 				u8g2.clearBuffer();
 				startMilis = millis();
@@ -638,6 +720,8 @@ void Blinky(String name)
 			u8g2.print("Time to start:");
 			u8g2.setCursor(1, 20);
 			u8g2.print(String(TimeToEnd));
+			if (millis() - lastInput > 10000)
+				u8g2.clearBuffer();
 			u8g2.sendBuffer();
 			// delay(20);
 		}
@@ -795,11 +879,18 @@ void HandleMyData()
 {
 	if (server.arg("Mac") != "" && server.arg("IP") != "" && server.arg("ID") != "")
 	{
-		Serial.println(atoi(server.arg("ID").c_str()));
+		// Serial.println(atoi(server.arg("ID").c_str()));
+		server.sendHeader("Connection", "close");
 		server.send(200, "application/json", "{\"found\":true\"}");
 		doc["devices"][atoi(server.arg("ID").c_str())]["IP"] = server.arg("IP");
 		doc["devices"][atoi(server.arg("ID").c_str())]["Mac"] = server.arg("Mac");
 		doc["devices"][atoi(server.arg("ID").c_str())]["found"] = true;
-		Serial.println(doc.as<String>());
+		// Serial.println(doc.as<String>());
 	}
+	else
+	{
+		server.send(200, "application/json", "{\"found\":false\"}");
+	}
+	server.client().stop();
+	Serial.println("!!!!!Handling someone!!!!!");
 }

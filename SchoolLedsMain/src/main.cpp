@@ -344,7 +344,7 @@ void handleInput()
 	}
 	if (millis() - lastInputHandlerBlank > 1000)
 	{
-		lastInputHandlerBlank=millis();
+		lastInputHandlerBlank = millis();
 		IPAddress pps;
 		for (int j = 0; j < 2; j++)
 			for (int i = 0; i < 27; i++)
@@ -496,7 +496,45 @@ void Info()
 	u8g2.sendBuffer();
 }
 // DynamicJsonDocument Frames(16384*2);
+uint8_t blend = 10; // millis for blending/10
+bool responding[30];
+bool respondingTF[30];
+uint8_t packet[32];
+bool GotResponceTF(uint8_t id)
+{
+	int packetSize = UDP.parsePacket();
 
+	if (packetSize)
+	{
+		int len = UDP.read(packet, 32);
+		// bool led = true;
+		if (len > 0)
+		{
+			packet[len] = '\0';
+		}
+
+		int responceId = packet[2];
+		responding[responceId] = true;
+		respondingTF[responceId] = true;
+	}
+	return (respondingTF[id]);
+}
+void ClearResponce()
+{
+	for (int i = 0; i < 30; i++)
+		responding[i] = false;
+}
+void ClearResponceTF()
+{
+	for (int i = 0; i < 30; i++)
+		respondingTF[i] = false;
+}
+void ResponceToFile()
+{
+	for (int i = 0; i < 30; i++)
+		doc["devices"][i]["found"] = responding[i];
+}
+int ClearFrame = 0;
 void Blinky(String name)
 {
 	u8g2.clearBuffer();
@@ -569,6 +607,7 @@ void Blinky(String name)
 		long startMilis = 0;
 		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle || !CheckSunAngle) && (!dont || !CheckTime))
 			if (frames > 0)
+			{
 				for (int f = 0; f < frames; f++)
 				{
 
@@ -619,12 +658,17 @@ void Blinky(String name)
 								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
 								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
 								UDP.write(f);
-								UDP.write(frame2);
+								UDP.write(blend);
 								UDP.endPacket();
+								// responce
+								if (GotResponceTF(i))
+									break;
 							}
 
 						delay(1);
 					}
+
+					ClearResponceTF();
 					loadingBar(int(float(f) / float(frames) * 100));
 					u8g2.setFont(u8g2_font_6x13_tr);
 					u8g2.setCursor(1, 11);
@@ -641,8 +685,10 @@ void Blinky(String name)
 						u8g2.clearBuffer();
 					u8g2.sendBuffer();
 					u8g2.clearBuffer();
-					
 				}
+				ResponceToFile();
+				ClearResponce();
+			}
 			else
 			{
 				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
@@ -694,10 +740,14 @@ void Blinky(String name)
 							UDP.write(rand() % 255);
 							UDP.write(frame2);
 							UDP.endPacket();
+							if (GotResponceTF(i))
+								break;
 						}
 
 					delay(1);
 				}
+
+				ClearResponceTF();
 				u8g2.setFont(u8g2_font_6x13_tr);
 				u8g2.setCursor(1, 11);
 				int timeMillis = millis() - startMilis;
@@ -712,6 +762,12 @@ void Blinky(String name)
 				u8g2.sendBuffer();
 				u8g2.clearBuffer();
 				startMilis = millis();
+				if(ClearFrame>6){
+				ResponceToFile();
+				ClearResponce();
+				ClearFrame=0;
+				}
+				ClearFrame++;
 			}
 		else
 		{
@@ -732,6 +788,7 @@ void Blinky(String name)
 	SdCard.close();
 	Serial.println("close");
 }
+
 int animSelect = 0;
 bool isAnim(const std::string &str)
 {

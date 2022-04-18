@@ -325,6 +325,7 @@ int NewColB = 0;
 int OldFrame = 0;
 int NewFrame = 0;
 long lastMilis = 0;
+int blendering = 100;
 void loop()
 {
 	while (WiFi.status() != WL_CONNECTED)
@@ -346,9 +347,17 @@ void loop()
 		{
 			packet[len] = '\0';
 		}
-		lastMilis =millis();
+		lastMilis = millis();
 		NewFrame = packet[3];
-		// int Frame = packet[1] + (255 * packet[2]);
+
+		UDP.beginPacket(UDP.remoteIP(), UDP.remotePort());
+		UDP.write('G');
+		UDP.write('G');
+		UDP.write(ID);
+		UDP.write(0);
+		UDP.write(0);
+		UDP.endPacket();
+
 		if (OldFrame != NewFrame)
 		{
 			OldFrame = NewFrame;
@@ -358,11 +367,13 @@ void loop()
 			NewColR = packet[0];
 			NewColG = packet[1];
 			NewColB = packet[2];
+			blendering = int(packet[4])*10;
 			lastMilis = millis();
+			
 			// Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
 		}
 	}
-	float a = float(millis() - lastMilis) / 99;
+	float a = float(millis() - lastMilis) / float(blendering);
 	if (a > 1)
 		a = 1;
 	if (a < 0)
@@ -379,6 +390,7 @@ void loop()
 		NewColR = 0;
 		NewColG = 0;
 		NewColB = 0;
+		blendering=1000;
 		WiFiClient client;
 		HTTPClient http;
 		String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();

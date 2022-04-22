@@ -250,6 +250,7 @@ void setup()
 	server.on("/espinator/MyData", HandleMyData);
 	server.begin();
 	pinMode(0, INPUT_PULLUP);
+	UDP.begin(UDP_PORT);
 	loadingBar(100, "Found: " + String(GetFounds()) + "/27", true);
 	loadingBar(100, "Done!", true);
 	if (!SpeedBoot)
@@ -518,6 +519,8 @@ bool GotResponceTF(uint8_t id)
 		respondingTF[responceId] = true;
 	}
 	return (respondingTF[id]);
+	if(respondingTF[id])
+		responding[id] = true;
 }
 void ClearResponce()
 {

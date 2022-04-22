@@ -202,12 +202,13 @@ bool blinky = false;
 void setup()
 {
 	Serial.begin(115200);
+	
+	Serial.println("Started");
+	Serial.println("Started");
 	EEPROM.begin(512);
-	Serial.println("Started");
-	Serial.println("Started");
 	ID = GetID();
 	IP = GetIP();
-	ssid = Getssid();
+	ssid = Getssid(); 
 	pass = Getpass();
 	Serial.println("ssid: " + ssid);
 	Serial.println("pass: " + pass);
@@ -215,6 +216,7 @@ void setup()
 	// Led strip setup
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalLEDStrip);
+	//FastLED.setMaxPowerInMilliWatts(10);
 
 	// Just blinkeys
 	for (int i = 0; i < 6; i++)
@@ -367,13 +369,13 @@ void loop()
 			NewColR = packet[0];
 			NewColG = packet[1];
 			NewColB = packet[2];
-			blendering = int(packet[4])*10;
+			//blendering = int(packet[4])*10;
 			lastMilis = millis();
 			
 			// Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
 		}
 	}
-	float a = float(millis() - lastMilis) / float(blendering);
+	float a = float(millis() - lastMilis) / 100;
 	if (a > 1)
 		a = 1;
 	if (a < 0)

@@ -16,29 +16,33 @@
 #include <cstring>
 #include <SolarPosition.h>
 #include <NTPClient.h>
-//#include <ESPAsyncTCP.h>
-//#include <ESPAsyncWebServer.h>
+#define UDP_PORT 4210
 
 float timeZone = 2;
 float MaxSunAngle = 2;
 struct tm startTime;
 struct tm endTime;
-#define UDP_PORT 4210
-WiFiUDP UDP;
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
-void HandleMyData();
-ESP8266WebServer server(80);
-// syncWebServer server(80);
-String ssid = "";
-String pass = "";
-const size_t capacity = 512 * 8;
-DynamicJsonDocument doc(capacity);
-File SdCard;
-
 SolarPosition RigaSun(56, 24);
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
+
+WiFiUDP UDP;
+
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
+
+// this made it work
+void HandleMyData();
+
+ESP8266WebServer server(80);
+String ssid = "";
+String pass = "";
+
+const size_t capacity = 512 * 8;
+DynamicJsonDocument doc(capacity);
+File SdCard;
+
+// Magic stuff for splitting strings
 String getValue(String data, char separator, int index)
 {
 	int found = 0;
@@ -56,28 +60,31 @@ String getValue(String data, char separator, int index)
 	}
 	return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
+
+// Sends black packets to all controllers
 void Blank()
 {
 	for (int i = 0; i < 27; i++)
 	{
 		IPAddress pps;
 		pps.fromString(doc["devices"][i]["IP"].as<String>());
+		if (doc["devices"][i]["found"])
+			for (int j = 0; j < 64; j++)
+			{
+				UDP.beginPacket(pps, UDP_PORT);
 
-		for (int j = 0; j < 64; j++)
-		{
-			UDP.beginPacket(pps, UDP_PORT);
-
-			// for (int jj = 0; jj < 16; jj++)
-			UDP.write(uint8_t(0));
-			UDP.write(uint8_t(0));
-			UDP.write(uint8_t(0));
-			UDP.write(uint8_t(0));
-			UDP.write(uint8_t(0));
-			UDP.endPacket();
-		}
+				// for (int jj = 0; jj < 16; jj++)
+				UDP.write(uint8_t(0));
+				UDP.write(uint8_t(0));
+				UDP.write(uint8_t(0));
+				UDP.write(uint8_t(0));
+				UDP.write(uint8_t(0));
+				UDP.endPacket();
+			}
 	}
 }
 
+// Initial loading bar stuff
 String loads[5];
 void loadingBarClear()
 {
@@ -116,6 +123,7 @@ void loadingBar(int filled)
 	u8g2.drawBox(128 / 2 - with / 2, 64 - height, filled, height);
 }
 
+// returns amount of found devices
 int GetFounds()
 {
 	int found = 0;
@@ -124,6 +132,7 @@ int GetFounds()
 			found++;
 	return (found);
 }
+
 bool CheckTime = true;
 bool CheckSunAngle = true;
 void setup()
@@ -257,6 +266,8 @@ void setup()
 	if (!SpeedBoot)
 		delay(1000);
 }
+
+// input vars
 bool Up = false;
 bool Down = false;
 bool UpRn = false;
@@ -267,6 +278,7 @@ bool buttonOld = false;
 long lastInput = 0;
 long lastInputHandler = 0;
 long lastInputHandlerBlank = 0;
+// Handles inputs
 void handleInput(bool hehe)
 {
 
@@ -309,6 +321,7 @@ void handleInput(bool hehe)
 	lastInputHandler = millis();
 	// u8g2.setFont(u8g2_font_6x13_tr); u8g2.drawStr(0,64,("Ram:"+String(system_get_free_heap_size())).c_str());
 }
+// Also clears screene after some time
 void handleInput()
 {
 
@@ -432,7 +445,7 @@ void ConnectedOnes()
 	u8g2.clearBuffer();
 	u8g2.sendBuffer();
 }
-
+// Info screenes
 void Info1()
 {
 	timeClient.update();
@@ -497,11 +510,14 @@ void Info()
 	u8g2.clearBuffer();
 	u8g2.sendBuffer();
 }
-// DynamicJsonDocument Frames(16384*2);
+
+// Didnt work
 uint8_t blend = 10; // millis for blending/10
+
 bool responding[30];
 bool respondingTF[30];
 uint8_t packet[32];
+// Checks responces and if got responce from controller this frame
 bool GotResponceTF(uint8_t id)
 {
 	int packetSize = UDP.parsePacket();
@@ -520,25 +536,29 @@ bool GotResponceTF(uint8_t id)
 		respondingTF[responceId] = true;
 	}
 	return (respondingTF[id]);
-	if(respondingTF[id])
+	if (respondingTF[id])
 		responding[id] = true;
 }
+// used to clear resoponces after updating controllers online --> ResponceToFile()
 void ClearResponce()
 {
 	for (int i = 0; i < 30; i++)
 		responding[i] = false;
 }
+// used to clear resopnes in this frame
 void ClearResponceTF()
 {
 	for (int i = 0; i < 30; i++)
 		respondingTF[i] = false;
 }
+// sets devices with are online to with respond
 void ResponceToFile()
 {
 	for (int i = 0; i < 30; i++)
 		doc["devices"][i]["found"] = responding[i];
 }
 int ClearFrame = 0;
+// used to play animation/image until click
 void Blinky(String name)
 {
 	u8g2.clearBuffer();
@@ -609,12 +629,13 @@ void Blinky(String name)
 		bool dont = TimeToStart < 0 && TimeToEnd > 0;
 		loadingBarClear();
 		long startMilis = 0;
-		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle || !CheckSunAngle) && (!dont || !CheckTime))
+		//   \/                Checks if sun angle right                        \/  \/need sun angle chec\/   \/time in range and neet to check\/
+		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle ||    !CheckSunAngle   ) && (!dont || !CheckTime))
 			if (frames > 0)
 			{
 				for (int f = 0; f < frames; f++)
 				{
-
+					//Draws anim
 					u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
 					for (int y = 0; y < 9; y++)
 						for (int x = 0; x < 3; x++)
@@ -646,18 +667,15 @@ void Blinky(String name)
 						runing = false;
 						break;
 					}
+					//Sends anim
 					for (int i = 0; i < 27; i++)
 					{
 						IPAddress pps;
 						pps.fromString(doc["devices"][i]["IP"].as<String>());
-						// if (i == 0)
-						//	pps.fromString("192.168.72.210");
 						if (doc["devices"][i]["found"])
 							for (int j = 0; j < 16; j++)
 							{
 								UDP.beginPacket(pps, UDP_PORT);
-
-								// for (int jj = 0; jj < 16; jj++)
 								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
 								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
 								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
@@ -690,11 +708,14 @@ void Blinky(String name)
 					u8g2.sendBuffer();
 					u8g2.clearBuffer();
 				}
+
 				ResponceToFile();
 				ClearResponce();
+//end of anim // all frames complete
 			}
 			else
 			{
+				//Displays image
 				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
 				for (int y = 0; y < 9; y++)
 					for (int x = 0; x < 3; x++)
@@ -726,12 +747,12 @@ void Blinky(String name)
 					runing = false;
 					break;
 				}
+				//Sends image
 				for (int i = 0; i < 27; i++)
 				{
 					IPAddress pps;
 					pps.fromString(doc["devices"][i]["IP"].as<String>());
-					// if (i == 0)
-					//	pps.fromString("192.168.72.210");
+
 					if (doc["devices"][i]["found"])
 						for (int j = 0; j < 16; j++)
 						{
@@ -766,12 +787,15 @@ void Blinky(String name)
 				u8g2.sendBuffer();
 				u8g2.clearBuffer();
 				startMilis = millis();
-				if(ClearFrame>6){
-				ResponceToFile();
-				ClearResponce();
-				ClearFrame=0;
+				//ResponceToFile every 6 seconds
+				if (ClearFrame > 6)
+				{
+					ResponceToFile();
+					ClearResponce();
+					ClearFrame = 0;
 				}
 				ClearFrame++;
+//End of sending image
 			}
 		else
 		{
@@ -783,16 +807,18 @@ void Blinky(String name)
 			if (millis() - lastInput > 10000)
 				u8g2.clearBuffer();
 			u8g2.sendBuffer();
-			// delay(20);
 		}
 		// delete ptm;
-	}
+	}//Ends while(true)
+
+    //After exiting animFunction
 	Blank();
 	Serial.println("Send done");
 	SdCard.close();
 	Serial.println("close");
 }
 
+// checks if files is anim/image
 int animSelect = 0;
 bool isAnim(const std::string &str)
 {
@@ -800,6 +826,7 @@ bool isAnim(const std::string &str)
 	return (str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0);
 	// return(true);
 }
+// anim/pic selection screene
 void Anims()
 {
 	File root = SD.open("/");
@@ -894,6 +921,7 @@ void Anims()
 	}
 }
 
+// main menu
 String menu[4] = {"Connected", "Animations", "Info", "Reboot"};
 int selection = 0;
 void loop()
@@ -936,6 +964,8 @@ void loop()
 	u8g2.sendBuffer();
 	delay(50);
 }
+
+// Handles controller that wants to connect
 void HandleMyData()
 {
 	if (server.arg("Mac") != "" && server.arg("IP") != "" && server.arg("ID") != "")

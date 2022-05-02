@@ -77,7 +77,7 @@ void Blank()
 				UDP.write(uint8_t(0));
 				UDP.write(uint8_t(0));
 				UDP.write(uint8_t(0));
-				UDP.write(uint8_t(0));
+				UDP.write(uint8_t(200));
 				UDP.write(uint8_t(0));
 				UDP.endPacket();
 			}
@@ -261,7 +261,7 @@ void setup()
 	server.begin();
 	pinMode(0, INPUT_PULLUP);
 	UDP.begin(UDP_PORT);
-	loadingBar(100, "Found: " + String(GetFounds()) + "/27", true);
+	loadingBar(100, "Started UDP", true);
 	loadingBar(100, "Done!", true);
 	if (!SpeedBoot)
 		delay(1000);

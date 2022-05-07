@@ -185,9 +185,9 @@ def ImgConvertion(Nam,loc):
          #print("");
          for y in range(3):
              sleep(0.01)
-             file.write(chr(int(  hex_to_rgb(buf[y][x])[2]/2  )))
-             file.write(chr(int(  hex_to_rgb(buf[y][x])[1]/2  )))
              file.write(chr(int(  hex_to_rgb(buf[y][x])[0]/2  )))
+             file.write(chr(int(  hex_to_rgb(buf[y][x])[1]/2  )))
+             file.write(chr(int(  hex_to_rgb(buf[y][x])[2]/2  )))
              file.write(chr(2))
              file.write(chr(3))
              ProgressLabel.config(text="progress:"+str(round((x*3+y)/26*100))+"%")

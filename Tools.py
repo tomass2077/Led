@@ -2,7 +2,6 @@
 #from ctypes import alignment
 #from dataclasses import replace
 #from logging import PlaceHolder
-from msilib.schema import TextStyle
 #from re import X
 #from socket import timeout
 #from telnetlib import IP
@@ -10,7 +9,6 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import CENTER, filedialog as fd
 from tkinter.colorchooser import askcolor
-from numpy import spacing
 from ttkthemes  import ThemedTk
 #from ttkthemes  import ThemedStyle
 from time import sleep
@@ -24,7 +22,8 @@ import json
 from tkintermapview import TkinterMapView
 #import sys
 import serial
-import serial.tools.list_ports
+from serial import Serial
+from serial.tools import list_ports
 
 window = ThemedTk(theme="equilux")
 window.geometry("300x350")
@@ -219,9 +218,9 @@ def ImageMaker():
     ttk.Label(window,text="Name:",borderwidth=2,).place(y=100,x=150,anchor="center")
     ttk.Entry(window,textvariable=Name).place(y=120,x=150,anchor="center")
     ttk.Button(window ,text='Select destination',command=select_DestinationImg).place(y=160,x=150,anchor="center")
-Ssid = tk.StringVar()
-Pass = tk.StringVar()
-Ip = tk.StringVar()
+Ssid = tk.StringVar(value="Domdaris-Work")
+Pass = tk.StringVar(value="G9Uhb8*kv.")
+Ip = tk.StringVar(value="10.10.1.161")
 Id = tk.StringVar()
 checkSun=tk.BooleanVar()
 checkTime=tk.BooleanVar()
@@ -363,7 +362,7 @@ def Com():
     for widget in window.winfo_children():
          widget.destroy()
     ttk.Label(text="Plug in addapter",borderwidth=2).pack()
-    ports = serial.tools.list_ports.comports()
+    ports = list_ports.comports()
     global AvailableCom
     AvailableCom = []
     for p in ports:
@@ -399,32 +398,44 @@ def UploadProcedure():
         ser.flushInput()
         ser.write(("ssid"+Ssid.get()).encode('utf-8'))
         data = ser.readline()
-        if(data.decode('utf-8')=="ssid set to:"+Ssid.get()):
-            ttk.Label(window,text=data,borderwidth=2).grid(row=Row+3, column=1)
-            UploadStage+=1
-            data = ser.readline()
+        try:
+            if(data.decode('utf-8')=="ssid set to:"+Ssid.get()):
+                ttk.Label(window,text=data,borderwidth=2).grid(row=Row+3, column=1)
+                UploadStage+=1
+                data = ser.readline()
+        except Exception:
+            pass
     elif(UploadStage==4):
         ttk.Label(window,text="Writing pass",borderwidth=2).grid(row=Row+4, column=1)
         ser.write(("pass"+Pass.get()).encode('utf-8'))
         data = ser.readline()
-        if(data.decode('utf-8')=="pass set to:"+Pass.get()):
-            ttk.Label(window,text=data,borderwidth=2).grid(row=Row+5, column=1)
-            UploadStage+=1
+        try:
+            if(data.decode('utf-8')=="pass set to:"+Pass.get()):
+                ttk.Label(window,text=data,borderwidth=2).grid(row=Row+5, column=1)
+                UploadStage+=1
+        except Exception:
+            pass
     elif(UploadStage==5):
         ttk.Label(window,text="Writing IP",borderwidth=2).grid(row=Row+6, column=1)
         ser.write(("ip"+Ip.get()).encode('utf-8'))
         data = ser.readline()
-        if(data.decode('utf-8')=="Ip set to:"+Ip.get()):
-            ttk.Label(window,text=data,borderwidth=2).grid(row=Row+7, column=1)
-            UploadStage+=1
+        try:
+            if(data.decode('utf-8')=="Ip set to:"+Ip.get()):
+                ttk.Label(window,text=data,borderwidth=2).grid(row=Row+7, column=1)
+                UploadStage+=1
+        except Exception:
+            pass
     elif(UploadStage==6):
         ttk.Label(window,text="Writing ID",borderwidth=2).grid(row=Row+8, column=1)
         ser.write(("id"+Id.get()).encode('utf-8'))
         data = ser.readline()
-        if(data.decode('utf-8')=="ID set to:"+Id.get()):
-            ttk.Label(window,text=data,borderwidth=2).grid(row=Row+9, column=1)
-            UploadStage=-1
-            window.after(1000,StipConfig)
+        try:
+            if(data.decode('utf-8')=="ID set to:"+Id.get()):
+                ttk.Label(window,text=data,borderwidth=2).grid(row=Row+9, column=1)
+                UploadStage=-1
+                window.after(1000,StipConfig)
+        except Exception:
+            pass
     if(UploadStage!=-1):
         window.after(1, UploadProcedure)
 def StipConfig():
@@ -449,7 +460,7 @@ def StipConfig():
     ttk.Button(window ,text='Initiate upload',command=UploadProcedure,padding=2).grid(row=Row, column=1)
 serc = True
 def SearchCom():
-    ports = serial.tools.list_ports.comports()
+    ports = list_ports.comports()
     global AvailableCom
     global serc
     global UploadPort
@@ -463,7 +474,7 @@ def SearchCom():
             print(c)
             UploadPort=c
             global ser
-            ser=serial.Serial(UploadPort,115200,timeout=0.5)
+            ser=Serial("/dev/"+str(UploadPort),115200,timeout=0.5)
             StipConfig()
     AvailableCom = Coms
     Id.set("0")

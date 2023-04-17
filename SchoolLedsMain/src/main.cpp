@@ -16,7 +16,10 @@
 #include <cstring>
 #include <SolarPosition.h>
 #include <NTPClient.h>
+#include "ESPAsyncUDP.h"
+
 #define UDP_PORT 4210
+uint8_t packet[32];
 
 float timeZone = 2;
 float MaxSunAngle = 2;
@@ -30,6 +33,79 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 WiFiUDP UDP;
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
+
+uint8_t fuffer[27][3];
+uint8_t fufferTmp[27][3];
+AsyncUDP udp;
+uint8_t Rssis[27];
+long LastMessage[27];
+String Ips[27];
+int Interval = 1000; // Milis
+void SetLedColor(int w, uint8_t r, uint8_t g, uint8_t b)
+{ // Method/function defined inside the class
+
+	fufferTmp[w][0] = r;
+	fufferTmp[w][1] = g;
+	fufferTmp[w][2] = b;
+}
+void ClearBuffer()
+{
+	for (int w = 0; w < 27; w += 1)
+	{
+		SetLedColor(w, 0, 0, 0);
+	}
+}
+void UpdateBuffer()
+{
+
+	for (int w = 0; w < 27; w += 1)
+	{
+		fuffer[w][0] = fufferTmp[w][0];
+		fuffer[w][1] = fufferTmp[w][1];
+		fuffer[w][2] = fufferTmp[w][2];
+
+	}
+	}
+
+void RunForAsyncs(AsyncUDPPacket packet)
+{
+	// Serial.println("GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT");
+	IPAddress From = packet.remoteIP();
+	int responceId = packet.data()[0];
+
+	Serial.println(From.toString());
+	int rssi = packet.data()[1];
+	Rssis[responceId] = rssi;
+	LastMessage[responceId] = millis();
+	Ips[responceId] = From.toString();
+	UDP.beginPacket(From, UDP_PORT);
+	// for (int jj = 0; jj < 16; jj++)
+	UDP.write(uint8_t(fuffer[responceId][0])); // R
+	UDP.write(uint8_t(fuffer[responceId][1])); // G
+	UDP.write(uint8_t(fuffer[responceId][2])); // B
+	UDP.write(uint8_t((Interval - millis() % Interval) / 4));
+	UDP.write(uint8_t((Interval - millis() % Interval) / 4));
+	UDP.write(uint8_t(round(millis() / (Interval / 2))));
+	UDP.endPacket();
+}
+void RunForAsync(AsyncUDPPacket packet)
+{
+	RunForAsyncs(packet);
+}
+void AsyncUdp()
+{
+	for (int w = 0; w < 27; w += 1)
+	{
+		Rssis[w] = 0;
+		LastMessage[w] = 0;
+		Ips[w] = "---.---.---.---";
+	}
+	ClearBuffer();
+	UpdateBuffer();
+
+	udp.listen(UDP_PORT);
+	udp.onPacket(RunForAsync);
+}
 
 // this made it work
 void HandleMyData();
@@ -65,24 +141,8 @@ String getValue(String data, char separator, int index)
 // Sends black packets to all controllers
 void Blank()
 {
-	for (int i = 0; i < 27; i++)
-	{
-		IPAddress pps;
-		pps.fromString(doc["devices"][i]["IP"].as<String>());
-		if (doc["devices"][i]["found"])
-			for (int j = 0; j < 64; j++)
-			{
-				UDP.beginPacket(pps, UDP_PORT);
-
-				// for (int jj = 0; jj < 16; jj++)
-				UDP.write(uint8_t(0));
-				UDP.write(uint8_t(0));
-				UDP.write(uint8_t(0));
-				UDP.write(uint8_t(200));
-				UDP.write(uint8_t(0));
-				UDP.endPacket();
-			}
-	}
+	ClearBuffer();
+	UpdateBuffer();
 }
 
 // Initial loading bar stuff
@@ -191,13 +251,15 @@ void setup()
 		delay(500);
 
 	loadingBar(20, "Connecting to Wi-Fi", true);
+	Serial.println("");
 	Serial.print("MAC: ");
 	Serial.println(WiFi.macAddress());
+	Serial.println("SSID:" + ssid);
 	// IPAddress ip(192, 168, 1, 132);
 	// IPAddress gateway(192, 168, 100, 1);
 	// IPAddress subnet(255, 255, 255, 0);
 	// WiFi.config(ip, gateway, subnet);
-
+	WiFi.persistent(false);
 	WiFi.hostname("espMain");
 	WiFi.disconnect();
 	WiFi.begin(ssid, pass);
@@ -213,6 +275,7 @@ void setup()
 		else
 			loadingBar(20 + i, "Connecting to Wi-Fi", false);
 	}
+	AsyncUdp();
 	// if (MDNS.begin("espMain"))
 	//{ // Start mDNS with name esp8266
 	//	Serial.println("MDNS started");
@@ -362,22 +425,8 @@ void handleInput()
 	{
 		lastInputHandlerBlank = millis();
 		IPAddress pps;
-		for (int j = 0; j < 2; j++)
-			for (int i = 0; i < 27; i++)
-			{
-				pps.fromString(doc["devices"][i]["IP"].as<String>());
-				if (doc["devices"][i]["found"])
-				{
-
-					UDP.beginPacket(pps, UDP_PORT);
-					UDP.write(0);
-					UDP.write(0);
-					UDP.write(0);
-					UDP.write(rand() % 255);
-					UDP.write(0);
-					UDP.endPacket();
-				}
-			}
+		Blank();
+		UpdateBuffer();
 	}
 	buttonOld = button;
 	Serial.print("Last InputHandler:");
@@ -423,19 +472,23 @@ void ConnectedOnes()
 				u8g2.setCursor(5 + offset * 3, 15 + 9 * (i - 18));
 			else if (i < 27)
 				u8g2.setCursor(5 + offset * 4, 15 + 9 * (i - 21));
-			if (bool(doc["devices"][i]["found"]))
+			if (bool(millis()-LastMessage[i]<10000))
 			{
-				if (i < 10)
-					u8g2.print(".0" + (String)i + ".");
+				Rssis[i]=abs(Rssis[i]);
+				if(Rssis[i]>99)
+					Rssis[i]=99;
+				if (Rssis[i] < 10)
+					u8g2.print(".0" + (String)Rssis[i] + ".");
 				else
-					u8g2.print("." + (String)i + ".");
+					u8g2.print("." + (String)Rssis[i] + ".");
 			}
 			else
 			{
-				if (i < 10)
-					u8g2.print("?0" + (String)i + "?");
-				else
-					u8g2.print("?" + (String)i + "?");
+				u8g2.print("?--?");
+				//if (i < 10)
+				//	u8g2.print("?0" + (String)Rssis[i] + "?");
+				//else
+				//	u8g2.print("?" + (String)Rssis[i] + "?");
 			}
 		}
 		u8g2.setDrawColor(1);
@@ -517,7 +570,7 @@ uint8_t blend = 10; // millis for blending/10
 
 bool responding[30];
 bool respondingTF[30];
-uint8_t packet[32];
+
 // Checks responces and if got responce from controller this frame
 bool GotResponceTF(uint8_t id)
 {
@@ -631,12 +684,13 @@ void Blinky(String name)
 		loadingBarClear();
 		long startMilis = 0;
 		//   \/                Checks if sun angle right                        \/  \/need sun angle chec\/   \/time in range and neet to check\/
-		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle ||    !CheckSunAngle   ) && (!dont || !CheckTime))
+		if ((RigaSun.getSolarElevation(epochTime - 3600 * timeZone) < MaxSunAngle || !CheckSunAngle) && (!dont || !CheckTime))
 			if (frames > 0)
 			{
+				Interval=1000;
 				for (int f = 0; f < frames; f++)
 				{
-					//Draws anim
+					// Draws anim
 					u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
 					for (int y = 0; y < 9; y++)
 						for (int x = 0; x < 3; x++)
@@ -668,28 +722,22 @@ void Blinky(String name)
 						runing = false;
 						break;
 					}
-					//Sends anim
+					// Sends anim
 					for (int i = 0; i < 27; i++)
 					{
 						IPAddress pps;
 						pps.fromString(doc["devices"][i]["IP"].as<String>());
-						if (doc["devices"][i]["found"])
+						//if (doc["devices"][i]["found"])
 							for (int j = 0; j < 16; j++)
 							{
-								UDP.beginPacket(pps, UDP_PORT);
-								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2));
-								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2));
-								UDP.write(uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
-								UDP.write(f);
-								UDP.write(blend);
-								UDP.endPacket();
-								// responce
-								if (GotResponceTF(i))
-									break;
+								SetLedColor(i, uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 0] * 2),
+											uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 1] * 2),
+											uint8_t(pp[f * 27 * sizeof(color) + i * sizeof(color) + 2] * 2));
 							}
 
 						delay(1);
 					}
+					UpdateBuffer();
 
 					ClearResponceTF();
 					loadingBar(int(float(f) / float(frames) * 100));
@@ -697,10 +745,7 @@ void Blinky(String name)
 					u8g2.setCursor(1, 11);
 					int timeMillis = millis() - startMilis;
 					// u8g2.clearBuffer();
-					if ((100 - timeMillis) > 0)
-					{
-						delay(100 - timeMillis);
-					}
+					delay(Interval - (millis() - Interval / 2) % Interval);
 					timeMillis = millis() - startMilis;
 					startMilis = millis();
 					u8g2.print("FPS:" + String(1000 / timeMillis));
@@ -712,11 +757,12 @@ void Blinky(String name)
 
 				ResponceToFile();
 				ClearResponce();
-//end of anim // all frames complete
+				// end of anim // all frames complete
 			}
 			else
 			{
-				//Displays image
+				Interval=1000;
+				// Displays image
 				u8g2.setFont(u8g2_font_amstrad_cpc_extended_8f);
 				for (int y = 0; y < 9; y++)
 					for (int x = 0; x < 3; x++)
@@ -748,31 +794,24 @@ void Blinky(String name)
 					runing = false;
 					break;
 				}
-				//Sends image
+				// Sends image
 				for (int i = 0; i < 27; i++)
 				{
 					IPAddress pps;
 					pps.fromString(doc["devices"][i]["IP"].as<String>());
 
-					if (doc["devices"][i]["found"])
+					//if (doc["devices"][i]["found"])
 						for (int j = 0; j < 16; j++)
 						{
-							UDP.beginPacket(pps, UDP_PORT);
+							// UDP.beginPacket(pps, UDP_PORT);
 
 							// for (int jj = 0; jj < 16; jj++)
-							UDP.write(uint8_t(pp[i * sizeof(color) + 0] * 2));
-							UDP.write(uint8_t(pp[i * sizeof(color) + 1] * 2));
-							UDP.write(uint8_t(pp[i * sizeof(color) + 2] * 2));
-							UDP.write(rand() % 255);
-							UDP.write(frame2);
-							UDP.endPacket();
-							if (GotResponceTF(i))
-								break;
+							SetLedColor(i, uint8_t(pp[i * sizeof(color) + 0] * 2), uint8_t(pp[i * sizeof(color) + 1] * 2), uint8_t(pp[i * sizeof(color) + 2] * 2));
 						}
 
 					delay(1);
 				}
-
+				UpdateBuffer();
 				ClearResponceTF();
 				u8g2.setFont(u8g2_font_6x13_tr);
 				u8g2.setCursor(1, 11);
@@ -788,7 +827,7 @@ void Blinky(String name)
 				u8g2.sendBuffer();
 				u8g2.clearBuffer();
 				startMilis = millis();
-				//ResponceToFile every 6 seconds
+				// ResponceToFile every 6 seconds
 				if (ClearFrame > 6)
 				{
 					ResponceToFile();
@@ -796,7 +835,7 @@ void Blinky(String name)
 					ClearFrame = 0;
 				}
 				ClearFrame++;
-//End of sending image
+				// End of sending image
 			}
 		else
 		{
@@ -810,9 +849,9 @@ void Blinky(String name)
 			u8g2.sendBuffer();
 		}
 		// delete ptm;
-	}//Ends while(true)
+	} // Ends while(true)
 
-    //After exiting animFunction
+	// After exiting animFunction
 	Blank();
 	Serial.println("Send done");
 	SdCard.close();

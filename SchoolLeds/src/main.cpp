@@ -1,31 +1,25 @@
 #include <Arduino.h>
-
+#define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "ESP8266HTTPClient.h"
 #include <EEPROM.h>
-#include <ArduinoJson.h>
 #include <WiFiUdp.h>
 #define UDP_PORT 4210
-#define DATA_PIN 2
+#define DATA_PIN 0
 #define COLOR_ORDER GRB
 #define NUM_LEDS 60
 #define LED_TYPE WS2812
 #define BRIGHTNESS 64
 CRGB leds[NUM_LEDS];
-
+//10.10.1.161
+//G9Uhb8*kv.
+//Domdaris-Work
 WiFiUDP UDP;
-String SendHTML(uint8_t P);
-void UThere();
-void HandleCol();
 String ssid = "";
 String pass = "";
-
-DynamicJsonDocument doc(512);
 String IP = "@@@@";
-ESP8266WebServer server(80);
 uint8_t program = 1;
 uint8_t ID = 24;
 String getValue(String data, char separator, int index)
@@ -201,25 +195,30 @@ int blynkMilis = 100;
 bool blinky = false;
 void setup()
 {
-	Serial.begin(115200);
-	
-	Serial.println("Started");
-	Serial.println("Started");
 	EEPROM.begin(512);
+	Serial.begin(115200);
+	Serial.println("Started");
+	Serial.println("Started");
+	
 	ID = GetID();
 	IP = GetIP();
+	ssid = Getssid(); 
+	pass = Getpass();
+	ID = GetID();
+	IP =GetIP();
 	ssid = Getssid(); 
 	pass = Getpass();
 	Serial.println("ssid: " + ssid);
 	Serial.println("pass: " + pass);
 	Serial.println("Got ID: " + String(int(ID)));
 	// Led strip setup
+	pinMode(DATA_PIN,OUTPUT);
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
 	FastLED.setCorrection(TypicalLEDStrip);
 	//FastLED.setMaxPowerInMilliWatts(10);
 
 	// Just blinkeys
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 10; i++)
 	{
 
 		leds[0] = CRGB::White;
@@ -231,25 +230,34 @@ void setup()
 		CheckInputs();
 		delay(50);
 	}
-	ID = GetID();
+	//ID = 1;//GetID();
 	IP = GetIP();
+	Serial.println("Got main IP: " + IP);
 	ssid = Getssid();
 	pass = Getpass();
 	FastLED.clear();
 
-	WiFi.hostname("esp01");
-	Serial.begin(115200);
+	//WiFi.hostname("esp01");
 	// Connect to wifi
+	WiFi.persistent(false);
+	delay(1000);
+	WiFi.disconnect();
+	delay(1000);
 	WiFi.begin(ssid, pass);
-	while (WiFi.status() != WL_CONNECTED)
+	delay(1000);
+	int i =0;
+	while (WiFi.isConnected()==false)
 	{
+		Serial.println(WiFi.status());
 		CheckInputs();
 		leds[0] = CRGB::Red;
 		FastLED.show();
-		delay(100);
+		delay(250);
 		leds[0] = CRGB::Black;
 		FastLED.show();
-		delay(100);
+		delay(250);
+		i+=1;
+
 	}
 	Serial.println("");
 	Serial.println("Got main IP: " + IP);
@@ -257,46 +265,8 @@ void setup()
 	Serial.println("Got IP: " + WiFi.localIP().toString());
 	Serial.println("Got ID: " + String(int(ID)));
 	// Server propeties
-	server.on("/espinator/SetCol", HandleCol);
-	server.on("/espinator/UThere", UThere);
-	server.begin();
 
 	// Get id and send ip from Mac
-	WiFiClient client;
-	HTTPClient http;
-	String asd = "espMain.local";
-	String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
-	http.setTimeout(400);
-	http.begin(client, serverPath.c_str());
-	int httpCode = http.GET();
-
-	bool ledy = false;
-	bool searching = true;
-	// search for main server
-	while (searching)
-	{
-		CheckInputs();
-		if (httpCode != -1)
-		{
-			deserializeJson(doc, http.getString());
-			// ID = doc["id"].as<int>();
-			searching = false;
-			Serial.println("Found server" + (String)httpCode);
-		}
-		else
-		{
-			http.begin(client, serverPath.c_str());
-			httpCode = http.GET();
-			if (ledy)
-				leds[0] = CRGB::Green;
-			else
-				leds[0] = CRGB::Black;
-			FastLED.show();
-			ledy = !ledy;
-			Serial.println("can't find server" + (String)httpCode);
-		}
-		delay(10);
-	}
 
 	leds[0] = CRGB::Black;
 	FastLED.show();
@@ -307,7 +277,7 @@ void setup()
 
 	for (int i = 0; i < 2; i++)
 	{
-		leds[0] = CRGB::Yellow;
+		leds[0] = CRGB::White;
 		FastLED.show();
 		delay(100);
 		leds[0] = CRGB::Black;
@@ -328,6 +298,9 @@ int OldFrame = 0;
 int NewFrame = 0;
 long lastMilis = 0;
 int blendering = 100;
+long LastRecive=0;
+long WaitFor=100;
+long FadeDur=1000;
 void loop()
 {
 	while (WiFi.status() != WL_CONNECTED)
@@ -339,7 +312,16 @@ void loop()
 		FastLED.show();
 		delay(100);
 	}
-	server.handleClient();
+	if(millis()-LastRecive>WaitFor){
+		//Serial.println(millis()-LastRecive);
+		IPAddress pip;
+		pip.fromString(IP);
+		UDP.beginPacket(pip, UDP_PORT);
+		UDP.write(uint8_t(ID));
+		UDP.write(uint8_t(abs(WiFi.RSSI())));
+		UDP.write(uint8_t(abs(WiFi.channel())));
+		UDP.endPacket();
+	}
 	int packetSize = UDP.parsePacket();
 	if (packetSize)
 	{
@@ -350,18 +332,13 @@ void loop()
 			packet[len] = '\0';
 		}
 		lastMilis = millis();
-		NewFrame = packet[3];
+		NewFrame = packet[5];
 
-		UDP.beginPacket(UDP.remoteIP(), UDP.remotePort());
-		UDP.write('G');
-		UDP.write('G');
-		UDP.write(ID);
-		UDP.write(0);
-		UDP.write(0);
-		UDP.endPacket();
+		
 
 		if (OldFrame != NewFrame)
 		{
+			
 			OldFrame = NewFrame;
 			OldColR = NewColR;
 			OldColG = NewColG;
@@ -369,20 +346,24 @@ void loop()
 			NewColR = packet[0];
 			NewColG = packet[1];
 			NewColB = packet[2];
+			Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB) + " " + String() + " " + String(millis()-LastRecive));
+			WaitFor=packet[3]*4;
+			FadeDur=packet[4]*4;
+			LastRecive=millis();
 			//blendering = int(packet[4])*10;
 			lastMilis = millis();
 			
 			// Serial.println(String(NewColR) + " " + String(NewColG) + " " + String(NewColB)+" " + String(NewFrame)+" " + String(OldFrame));
 		}
 	}
-	float a = float(millis() - lastMilis) / 100;
+	float a = float(millis() - lastMilis) / FadeDur;
 	if (a > 1)
 		a = 1;
 	if (a < 0)
 		a = 0;
 	Cola color = Interpolate(NewColR, NewColG, NewColB, OldColR, OldColG, OldColB, a);
 	FastLED.showColor(CRGB(color.r, color.g, color.b));
-	Serial.println(String(color.r) + " " + String(color.g) + " " + String(color.b) + " " + String(NewFrame) + " " + String(OldFrame));
+	
 	delay(1);
 	if (millis() - lastMilis > 10000)
 	{
@@ -393,34 +374,8 @@ void loop()
 		NewColG = 0;
 		NewColB = 0;
 		blendering=1000;
-		WiFiClient client;
-		HTTPClient http;
-		String serverPath = "http://" + IP + "/espinator/MyData?Mac=" + WiFi.macAddress() + "&ID=" + ID + "&IP=" + WiFi.localIP().toString();
-		http.setTimeout(150);
-		http.begin(client, serverPath.c_str());
-		int httpCode = http.GET();
 		CheckInputs();
 		lastMilis = millis();
 	}
 }
 
-// Server Asks
-void UThere()
-{
-	server.send(200, "application/json", "{ \"status\":\"ok\"}");
-	Serial.println("U There");
-}
-// Sent Col
-void HandleCol()
-{
-	if (server.arg("Col") != "")
-	{
-		int r, g, b;
-		char const *hexColor = server.arg("Col").c_str();
-		std::sscanf(hexColor, "#%02x%02x%02x", &r, &g, &b);
-		FastLED.showColor(CRGB(r, g, b));
-
-		server.send(200, "application/json", "{ \"status\":\"ok\"}");
-		blinky = false;
-	}
-}

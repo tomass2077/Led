@@ -18,25 +18,29 @@
 #include <NTPClient.h>
 #include "ESPAsyncUDP.h"
 
-#define UDP_PORT 4210
-uint8_t packet[32];
 
+
+//For turning off when lessns begine or the sun is up
 float timeZone = 2;
 float MaxSunAngle = 2;
 struct tm startTime;
 struct tm endTime;
 SolarPosition RigaSun(56, 24);
-
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
 
+
+#define UDP_PORT 4210
+uint8_t packet[32];
 WiFiUDP UDP;
 
+//Mini screen
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/U8X8_PIN_NONE);
 
-uint8_t fuffer[27][3];
-uint8_t fufferTmp[27][3];
+uint8_t fuffer[27][3];// Gets updated when you UpdateBuffer. This gets sent to leds
+uint8_t fufferTmp[27][3];// Gets updated when you set some color
 AsyncUDP udp;
+
 uint8_t Rssis[27];
 long LastMessage[27];
 String Ips[27];
@@ -48,6 +52,8 @@ void SetLedColor(int w, uint8_t r, uint8_t g, uint8_t b)
 	fufferTmp[w][1] = g;
 	fufferTmp[w][2] = b;
 }
+
+// BLACK
 void ClearBuffer()
 {
 	for (int w = 0; w < 27; w += 1)
@@ -67,6 +73,8 @@ void UpdateBuffer()
 	}
 	}
 
+
+//Got request from led for some data!
 void RunForAsyncs(AsyncUDPPacket packet)
 {
 	// Serial.println("GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT GOT");
